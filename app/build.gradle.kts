@@ -9,6 +9,9 @@ android {
         versionCode = 4
         versionName = "1.3-cloud"
     }
+    signingConfigs.getByName("debug") {
+        System.getenv("JIGEUM_DEBUG_KEYSTORE")?.let { storeFile = file(it) }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
