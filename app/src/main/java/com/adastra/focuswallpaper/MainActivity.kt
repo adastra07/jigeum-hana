@@ -34,7 +34,7 @@ class MainActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var controls: LinearLayout
     private lateinit var pause: Button
-    private lateinit var wallpaper: Button
+    private lateinit var timerPanel: LinearLayout
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private var wallpaperBusy = false
@@ -63,31 +63,26 @@ class MainActivity : Activity() {
             addView(button("설정", canvas, muted) { settings() })
         }
         gap(root, 12)
-        val card = column().apply { background = shape(ink, 22); setPadding(dp(20), dp(16), dp(20), dp(18)) }
-        root.addView(card)
-        card.addView(text("지금 집중할 일", 13f, Color.rgb(192, 215, 201)))
-        focus = text("", 24f, Color.WHITE).apply { setTypeface(null, Typeface.BOLD) }; card.addView(focus)
-        status = text("", 13f, Color.rgb(206, 221, 213)); card.addView(status)
-        clock = text("", 38f, Color.WHITE).apply { typeface = Typeface.MONOSPACE }; card.addView(clock)
-        controls = row(card)
-        pause = button("일시정지", Color.rgb(55, 77, 67), Color.WHITE) {
+        val checklist = column().apply { background = shape(Color.WHITE, 22, Color.rgb(225, 232, 226)); setPadding(dp(14), dp(12), dp(14), dp(14)) }
+        root.addView(checklist)
+        checklist.addView(text("체크리스트", 20f).apply { setTypeface(null, Typeface.BOLD) })
+        list = column(); checklist.addView(list); gap(checklist, 8)
+        checklist.addView(button("+ 할 일 추가") { editTask(null) }, LinearLayout.LayoutParams(-1, dp(48)))
+        // The checklist is the main screen; show timer details only while needed.
+        timerPanel = column().apply { setPadding(0, dp(18), 0, 0) }
+        root.addView(timerPanel)
+        focus = text("", 22f).apply { setTypeface(null, Typeface.BOLD) }; timerPanel.addView(focus)
+        status = text("", 13f, muted); timerPanel.addView(status)
+        clock = text("", 38f).apply { typeface = Typeface.MONOSPACE }; timerPanel.addView(clock)
+        controls = row(timerPanel)
+        pause = button("일시정지") {
             val timer = store.timer; val now = System.currentTimeMillis()
             if (timer.status == "running" && timer.remaining(now) == 0L) TimerEngine.finish(this)
             else store.timer = if (timer.status == "running") timer.pause(now) else timer.resume(now)
             TimerEngine.sync(this); updateFocus()
         }
         action(controls, pause)
-        action(controls, button("집중 종료", Color.rgb(55, 77, 67), Color.WHITE) { TimerEngine.stop(this); updateFocus() })
-        gap(card, 10)
-        wallpaper = button("홈·잠금화면 배경 미리보기", Color.WHITE, ink) { preview() }
-        card.addView(wallpaper, LinearLayout.LayoutParams(-1, dp(48)))
-        gap(root, 18)
-        val checklist = column().apply { background = shape(Color.WHITE, 22, Color.rgb(225, 232, 226)); setPadding(dp(14), dp(12), dp(14), dp(14)) }
-        root.addView(checklist)
-        checklist.addView(text("체크리스트", 20f).apply { setTypeface(null, Typeface.BOLD) })
-        checklist.addView(text("항목을 눌러 편집하고 집중 시간을 정하세요", 12f, muted))
-        list = column(); checklist.addView(list); gap(checklist, 8)
-        checklist.addView(button("+ 할 일 추가") { editTask(null) }, LinearLayout.LayoutParams(-1, dp(48)))
+        action(controls, button("집중 종료") { TimerEngine.stop(this); updateFocus() })
         renderTasks()
     }
     private fun active() = store.timer.status in listOf("running", "paused")
@@ -95,20 +90,17 @@ class MainActivity : Activity() {
     private fun updateFocus() {
         val timer = store.timer; val task = selected(); val active = active()
         val finished = timer.status == "finished" && task?.id == timer.taskId
-        focus.text = if (active) timer.title else task?.text ?: "작은 할 일 하나에\n집중해 보세요"
-        status.text = when {
-            timer.status == "running" -> "집중 중"
-            timer.status == "paused" -> "잠시 쉬는 중"
-            finished -> "집중 시간 완료!"
-            task != null -> "${task.minutes}분 집중 · 항목을 눌러 시작하세요"
-            else -> "아래 체크리스트에서 할 일을 눌러 주세요"
+        timerPanel.visibility = if (active || finished) View.VISIBLE else View.GONE
+        focus.text = timer.title
+        status.text = when (timer.status) {
+            "running" -> "집중 중"
+            "paused" -> "잠시 쉬는 중"
+            "finished" -> "집중 시간 완료!"
+            else -> ""
         }
         clock.text = TimerEngine.formatTime(timer.remaining(System.currentTimeMillis()))
-        clock.visibility = if (active || finished) View.VISIBLE else View.GONE
         controls.visibility = if (active) View.VISIBLE else View.GONE
         pause.text = if (timer.status == "paused") "재개" else "일시정지"
-        wallpaper.visibility = if (task != null) View.VISIBLE else View.GONE
-        wallpaper.isEnabled = task != null && !wallpaperBusy
     }
 
     private fun renderTasks() {
@@ -126,7 +118,21 @@ class MainActivity : Activity() {
                 if (task.done) paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
                 if (selected) setTypeface(null, Typeface.BOLD)
             })
-            body.addView(text(if (selected) "● 집중할 일 · ${task.minutes}분" else "${task.minutes}분 집중", 12f, if (selected) accent else muted))
+            line.addView(button(task.minutes.toString(), accent, Color.WHITE) {
+                store.tasks().firstOrNull { it.id == task.id }?.let { selectTask(it, run = true) }
+            }.apply {
+                contentDescription = "${task.text}, ${task.minutes}분 집중 시작"
+                textSize = 16f
+                minWidth = 0; minimumWidth = 0
+                setPadding(0, 0, 0, 0)
+                background = shape(accent, 24)
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            line.addView(button("×", Color.TRANSPARENT, muted) { deleteTask(task) }.apply {
+                contentDescription = "${task.text} 삭제"
+                textSize = 26f
+                minWidth = 0; minimumWidth = 0
+                setPadding(0, 0, 0, 0)
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
             check.setOnCheckedChangeListener { _, checked ->
                 val current = store.tasks(); current.firstOrNull { it.id == task.id }?.done = checked; store.saveTasks(current); renderTasks()
             }
@@ -141,6 +147,30 @@ class MainActivity : Activity() {
             store.timer = store.timer.copy(title = task.text); TimerEngine.sync(this)
         }
         renderTasks()
+    }
+    private fun selectTask(task: Task, run: Boolean, onApplied: () -> Unit = {}) {
+        val replace = active() && (run || store.timer.taskId != task.id)
+        val apply = {
+            persist(task)
+            if (replace || run) TimerEngine.stop(this)
+            store.selected = task.id
+            if (run) store.timer = TimerState("running", System.currentTimeMillis() + task.minutes * 60000L, title = task.text, taskId = task.id)
+            TimerEngine.sync(this); renderTasks(); onApplied(); applyWallpaper(task.text)
+            if (run) requestNotifications()
+        }
+        if (replace) AlertDialog.Builder(this).setTitle("현재 집중을 종료할까요?")
+            .setMessage(if (run) "기존 타이머를 종료하고 ${task.minutes}분 집중을 새로 시작합니다." else "기존 타이머를 종료하고 집중할 일을 바꿉니다.")
+            .setNegativeButton("취소", null).setPositiveButton("변경") { _, _ -> apply() }.show()
+        else apply()
+    }
+    private fun deleteTask(task: Task, onDeleted: () -> Unit = {}) {
+        AlertDialog.Builder(this).setTitle("할 일을 삭제할까요?").setMessage(task.text)
+            .setNegativeButton("취소", null).setPositiveButton("삭제") { _, _ ->
+                if (store.timer.taskId == task.id) TimerEngine.stop(this)
+                store.saveTasks(store.tasks().filterNot { it.id == task.id })
+                if (store.selected == task.id) store.selected = ""
+                renderTasks(); onDeleted()
+            }.show()
     }
     private fun editTask(original: Task?) {
         val draft = original?.copy() ?: Task(text = "")
@@ -172,28 +202,13 @@ class MainActivity : Activity() {
         fun close() { getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(title.windowToken, 0); dialog.dismiss() }
         fun chooseTask(run: Boolean) {
             val task = read() ?: return
-            val replace = active() && (run || store.timer.taskId != task.id)
-            val apply = {
-                persist(task)
-                if (replace || run) TimerEngine.stop(this)
-                store.selected = task.id
-                if (run) store.timer = TimerState("running", System.currentTimeMillis() + task.minutes * 60000L, title = task.text, taskId = task.id)
-                TimerEngine.sync(this); renderTasks(); close(); applyWallpaper(task.text)
-                if (run) requestNotifications()
-            }
-            if (replace) AlertDialog.Builder(this).setTitle("현재 집중을 종료할까요?").setMessage(if (run) "기존 타이머를 종료하고 ${task.minutes}분 집중을 새로 시작합니다." else "기존 타이머를 종료하고 집중할 일을 바꿉니다.").setNegativeButton("취소", null).setPositiveButton("변경") { _, _ -> apply() }.show()
-            else apply()
+            selectTask(task, run) { close() }
         }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { read()?.let { persist(it); close() } }
             choose.setOnClickListener { chooseTask(false) }; start.setOnClickListener { chooseTask(true) }
             if (original != null) dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                AlertDialog.Builder(this).setTitle("할 일을 삭제할까요?").setMessage(original.text).setNegativeButton("취소", null).setPositiveButton("삭제") { _, _ ->
-                    if (store.timer.taskId == original.id) TimerEngine.stop(this)
-                    store.saveTasks(store.tasks().filterNot { it.id == original.id })
-                    if (store.selected == original.id) store.selected = ""
-                    renderTasks(); close()
-                }.show()
+                deleteTask(original) { close() }
             }
             dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             title.requestFocus(); title.setSelection(title.text.length)
@@ -214,7 +229,7 @@ class MainActivity : Activity() {
     }
     private fun preview() {
         if (wallpaperBusy) return
-        val task = selected() ?: return
+        val task = selected() ?: run { toast("먼저 집중할 일을 선택해 주세요."); return }
         val size = displaySize()
         // Preview is bounded to avoid a second full-resolution bitmap in the UI.
         val width = minOf(size.x, 540); val height = (size.y.toLong() * width / size.x).toInt()
@@ -229,8 +244,9 @@ class MainActivity : Activity() {
         else if (!TimerEngine.notificationsAllowed(this)) toast("잠금화면에 표시하려면 설정에서 앱 알림을 허용하세요.")
     }
     private fun settings() {
-        AlertDialog.Builder(this).setTitle("설정").setItems(arrayOf("알림 · 잠금화면 안내", "정확한 완료 알람 허용")) { _, index ->
-            if (index == 0) AlertDialog.Builder(this).setTitle("잠금화면 알림").setMessage("앱 알림과 휴대전화의 잠금화면 알림 ‘내용 표시’를 허용하세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 상태에서 완료 알림이 늦을 수 있습니다. 앱 강제 종료 후에는 다시 앱을 열어야 복구됩니다.\n\n진행 알림을 지웠다면 앱을 다시 열어 복원할 수 있습니다.").setNegativeButton("닫기", null).setPositiveButton("앱 알림 설정") { _, _ -> openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }.show()
+        AlertDialog.Builder(this).setTitle("설정").setItems(arrayOf("알림 · 잠금화면 안내", "정확한 완료 알람 허용", "홈·잠금화면 배경 미리보기")) { _, index ->
+            if (index == 2) preview()
+            else if (index == 0) AlertDialog.Builder(this).setTitle("잠금화면 알림").setMessage("앱 알림과 휴대전화의 잠금화면 알림 ‘내용 표시’를 허용하세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 상태에서 완료 알림이 늦을 수 있습니다. 앱 강제 종료 후에는 다시 앱을 열어야 복구됩니다.\n\n진행 알림을 지웠다면 앱을 다시 열어 복원할 수 있습니다.").setNegativeButton("닫기", null).setPositiveButton("앱 알림 설정") { _, _ -> openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }.show()
             else if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
             else toast("이 Android 버전은 별도 권한이 필요 없습니다.")
         }.setNegativeButton("닫기", null).show()
