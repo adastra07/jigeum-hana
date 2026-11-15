@@ -94,18 +94,23 @@ class MainActivity : Activity() {
     private fun selected() = store.tasks().firstOrNull { it.id == store.selected }
     private fun updateFocus() {
         val timer = store.timer; val task = selected(); val active = active()
-        focus.text = if (active || timer.status == "finished") timer.title else task?.text ?: "할 일을 선택해 주세요"
-        status.text = when (timer.status) {
-            "running" -> "집중 중"
-            "paused" -> "일시정지"
-            "finished" -> "집중 시간 완료"
-            else -> if (task == null) "체크리스트에서 지금 할 일을 골라 보세요" else "${task.minutes}분 집중 준비"
+        val finished = timer.status == "finished" && task?.id == timer.taskId
+        focus.text = if (active) timer.title else task?.text ?: "작은 할 일 하나에\n집중해 보세요"
+        status.text = when {
+            timer.status == "running" -> "집중 중"
+            timer.status == "paused" -> "잠시 쉬는 중"
+            finished -> "집중 시간 완료!"
+            task != null -> "${task.minutes}분 집중 · 항목을 눌러 시작하세요"
+            else -> "아래 체크리스트에서 할 일을 눌러 주세요"
         }
-        clock.text = TimerEngine.formatTime(if (active) timer.remaining(System.currentTimeMillis()) else if (timer.status == "finished") 0 else (task?.minutes ?: 0) * 60000L)
+        clock.text = TimerEngine.formatTime(timer.remaining(System.currentTimeMillis()))
+        clock.visibility = if (active || finished) View.VISIBLE else View.GONE
         controls.visibility = if (active) View.VISIBLE else View.GONE
         pause.text = if (timer.status == "paused") "재개" else "일시정지"
+        wallpaper.visibility = if (task != null) View.VISIBLE else View.GONE
         wallpaper.isEnabled = task != null && !wallpaperBusy
     }
+
     private fun renderTasks() {
         list.removeAllViews()
         val tasks = store.tasks()
