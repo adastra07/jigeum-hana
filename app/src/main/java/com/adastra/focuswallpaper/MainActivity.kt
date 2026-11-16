@@ -75,7 +75,7 @@ class MainActivity : Activity() {
         timerPanel.addView(focus, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 20f, accent).apply { typeface = Typeface.MONOSPACE; setPadding(dp(8), 0, dp(6), 0) }
         timerPanel.addView(clock)
-        pause = flat("") { togglePause() }.apply { setPadding(dp(12), 0, dp(12), 0) }
+        pause = flat("") { togglePause() }.apply { setPadding(dp(13), 0, dp(13), 0) }
         timerPanel.addView(pause, LinearLayout.LayoutParams(dp(44), dp(44)))
         timerPanel.addView(flat("×") { TimerEngine.stop(this); updateFocus() }.apply { textSize = 24f; contentDescription = "집중 종료" }, LinearLayout.LayoutParams(dp(44), dp(44)))
         page = column().apply { setPadding(dp(16), 0, dp(16), dp(16)) }
@@ -95,7 +95,7 @@ class MainActivity : Activity() {
         pause.visibility = if (active()) View.VISIBLE else View.GONE
         val pauseIcon = if (timer.status == "paused") R.drawable.ic_play else R.drawable.ic_pause
         if (pause.tag != pauseIcon) {
-            val icon = getDrawable(pauseIcon)!!.mutate().apply { setTint(accent); setBounds(0, 0, dp(20), dp(20)) }
+            val icon = getDrawable(pauseIcon)!!.mutate().apply { setTint(accent); setBounds(0, 0, dp(18), dp(18)) }
             pause.setCompoundDrawables(icon, null, null, null); pause.tag = pauseIcon
         }
         pause.contentDescription = if (timer.status == "paused") "집중 재개" else "집중 일시정지"
@@ -358,7 +358,7 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.7", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 1.8", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
@@ -410,6 +410,7 @@ class MainActivity : Activity() {
         parent.addView(flat(if (detail.isEmpty()) title else "$title  ·  $detail", color = ink, action = action).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(42)))
     }
     private fun section(title: String, help: () -> Unit, content: (LinearLayout) -> Unit) {
+        if (page.childCount > 0) gap(page, 8)
         row(page).apply {
             addView(text(title, 14f, muted).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), 0, 0, 0) }, LinearLayout.LayoutParams(0, dp(34), 1f))
             addView(flat("") { help() }.apply {
