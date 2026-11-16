@@ -6,8 +6,8 @@ android {
         applicationId = "com.adastra.focuswallpaper"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.8"
+        versionCode = 10
+        versionName = "1.8.1"
     }
     signingConfigs.getByName("debug") {
         System.getenv("JIGEUM_DEBUG_KEYSTORE")?.let { storeFile = file(it) }

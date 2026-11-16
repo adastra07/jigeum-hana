@@ -119,7 +119,7 @@ class MainActivity : Activity() {
         listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, icon) ->
             val chosen = screen == id
             navigation.addView(flat(label, color = if (chosen) accent else muted) { screen = id; renderPage() }.apply {
-                textSize = 12f; setPadding(dp(12), dp(8), dp(12), dp(10)); setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
+                textSize = 12f; setPadding(dp(12), dp(14), dp(12), dp(6)); setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
                 val drawable = getDrawable(icon)!!.mutate().apply { setTint(if (chosen) accent else muted); setBounds(0, 0, dp(24), dp(24)) }
                 setCompoundDrawables(null, drawable, null, null); compoundDrawablePadding = dp(6)
                 isSelected = chosen
@@ -358,7 +358,7 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.8", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 1.8.1", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
