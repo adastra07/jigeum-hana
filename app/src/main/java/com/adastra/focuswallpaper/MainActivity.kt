@@ -24,7 +24,6 @@ import android.text.TextUtils
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
-import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
     private val ink = Color.rgb(32, 39, 35)
@@ -43,7 +42,6 @@ class MainActivity : Activity() {
     private var screen = "tasks"
     private var renderedSelection: String? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val executor = Executors.newSingleThreadExecutor()
     private var wallpaperBusy = false
     private val tick = object : Runnable {
         override fun run() {
@@ -110,7 +108,9 @@ class MainActivity : Activity() {
         }
     }
     private fun clearFocus() {
-        TimerEngine.clearFocus(this)
+        TimerEngine.clearFocus(this) { result ->
+            runOnUiThread { if (!isDestroyed && result.isFailure) toast("배경화면 문구를 지우지 못했습니다") }
+        }
         renderPage()
     }
     private fun togglePause() {
@@ -220,8 +220,7 @@ class MainActivity : Activity() {
     }
     private fun trashTask(task: Task, onMoved: () -> Unit = {}) {
         store.saveTasks(store.tasks().map { if (it.id == task.id) it.trash(System.currentTimeMillis()) else it })
-        if (store.timer.taskId == task.id) TimerEngine.stop(this)
-        if (store.selected == task.id) store.selected = ""
+        if (store.timer.taskId == task.id || store.selected == task.id) clearFocus()
         renderPage(); onMoved()
     }
     private fun permanentlyDelete(task: Task) {
@@ -385,7 +384,7 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.10", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 1.11", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
@@ -424,7 +423,7 @@ class MainActivity : Activity() {
         val message = when (key) {
             "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다."
             "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
-            else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 기존 배경화면을 자동으로 복원하지는 않습니다."
+            else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 집중 해제 시에는 할 일 문구를 지우고 적용했던 배경색만 남깁니다. 기존 배경 사진을 복원하지는 않습니다."
         }
         AlertDialog.Builder(this).setTitle(title).setMessage(message).apply {
             if (key == "wallpaper") {
@@ -452,12 +451,8 @@ class MainActivity : Activity() {
     private fun applyWallpaper(title: String, automatic: Boolean = true) {
         if (automatic && !store.wallpaperEnabled) return
         val size = displaySize(); val background = store.wallpaperColor; wallpaperBusy = true
-        executor.execute {
-            val result = runCatching {
-                val bitmap = WallpaperRenderer.render(title, size.x, size.y, background)
-                try { if (!automatic || store.wallpaperEnabled) WallpaperRenderer.applyToBoth(this, bitmap) } finally { bitmap.recycle() }
-            }
-            runOnUiThread { if (!isDestroyed) { wallpaperBusy = false; result.exceptionOrNull()?.let { toast("배경화면을 적용하지 못했습니다") } } }
+        WallpaperRenderer.applyFocus(this, title, size.x, size.y, background, store.selected, automatic) { result ->
+            runOnUiThread { if (!isDestroyed) { wallpaperBusy = false; if (result.isFailure) toast("배경화면을 적용하지 못했습니다") } }
         }
     }
     private fun preview() {
@@ -477,7 +472,6 @@ class MainActivity : Activity() {
     private fun openSettings(intent: Intent) { try { startActivity(intent) } catch (_: ActivityNotFoundException) { toast("휴대전화의 앱 설정에서 변경해 주세요.") } }
     override fun onResume() { super.onResume(); TimerEngine.sync(this); renderPage(); handler.removeCallbacks(tick); handler.post(tick) }
     override fun onPause() { handler.removeCallbacks(tick); super.onPause() }
-    override fun onDestroy() { executor.shutdown(); super.onDestroy() }
     override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen); super.onSaveInstanceState(outState) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); TimerEngine.sync(this)

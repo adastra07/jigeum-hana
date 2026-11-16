@@ -53,6 +53,13 @@ class Store(context: Context) {
     var wallpaperColor: Int
         get() = prefs.getInt("wallpaperColor", WallpaperPalette.colors.first().second)
         set(value) { prefs.edit().putInt("wallpaperColor", value).commit() }
+    // -1 denotes a pre-tracking installation; 0 is cleared, 1 is app-applied focus text.
+    var focusWallpaperState: Int
+        get() = prefs.getInt("focusWallpaperState", -1)
+        set(value) { prefs.edit().putInt("focusWallpaperState", value).commit() }
+    var appliedWallpaperColor: Int
+        get() = prefs.getInt("appliedWallpaperColor", wallpaperColor)
+        set(value) { prefs.edit().putInt("appliedWallpaperColor", value).commit() }
     var presets: List<Int>
         get() = runCatching {
             val a = JSONArray(prefs.getString("presets", "[5,25,60]"))

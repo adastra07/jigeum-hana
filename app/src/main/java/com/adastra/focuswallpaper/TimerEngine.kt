@@ -54,7 +54,13 @@ object TimerEngine {
         alarm(c).cancel(pending(c, "finish", 0)); manager(c).cancel(100); channels(c)
         if (notificationsAllowed(c)) manager(c).notify(101, Notification.Builder(c, FINISHED).setSmallIcon(R.drawable.ic_focus).setContentTitle("집중 시간 완료").setContentText(timer.title).setAutoCancel(true).setVisibility(Notification.VISIBILITY_PUBLIC).setContentIntent(open(c)).build())
     }
-    fun clearFocus(c: Context) { Store(c).selected = ""; stop(c) }
+    fun clearFocus(c: Context, finished: (Result<Unit>) -> Unit = {}) {
+        val store = Store(c)
+        val hadFocus = store.selected.isNotEmpty() || store.timer.status != "idle"
+        store.selected = ""
+        stop(c)
+        WallpaperRenderer.clearFocusText(c, hadFocus, finished)
+    }
     fun stop(c: Context) { Store(c).timer = TimerState(); manager(c).cancel(101); sync(c) }
     fun formatTime(ms: Long): String { val seconds = (ms.coerceAtLeast(0) + 999) / 1000; return String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60) }
 }
@@ -65,7 +71,11 @@ class TimerReceiver : BroadcastReceiver() {
         val now = System.currentTimeMillis()
         when (intent.action) {
             "finish" -> { TimerEngine.finish(context); return }
-            "stop" -> { TimerEngine.clearFocus(context); return }
+            "stop" -> {
+                val pendingResult = goAsync()
+                TimerEngine.clearFocus(context) { pendingResult.finish() }
+                return
+            }
             "pause" -> {
                 if (store.timer.status == "running" && store.timer.remaining(now) == 0L) { TimerEngine.finish(context); return }
                 store.timer = store.timer.pause(now)

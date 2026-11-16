@@ -6,8 +6,48 @@ import android.graphics.*
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import java.util.concurrent.Executors
 
 object WallpaperRenderer {
+    // Keep apply/clear operations ordered across the Activity and notification receiver.
+    private val worker = Executors.newSingleThreadExecutor()
+    fun applyFocus(context: Context, title: String, width: Int, height: Int, background: Int,
+                   taskId: String, automatic: Boolean, finished: (Result<Unit>) -> Unit) {
+        val c = context.applicationContext
+        worker.execute {
+            val result = runCatching {
+                val store = Store(c)
+                if (taskId.isEmpty() || store.selected != taskId || (automatic && !store.wallpaperEnabled)) return@runCatching
+                val bitmap = render(title, width, height, background)
+                try {
+                    if (store.selected == taskId && (!automatic || store.wallpaperEnabled)) {
+                        applyToBoth(c, bitmap)
+                        store.appliedWallpaperColor = background
+                        store.focusWallpaperState = 1
+                    }
+                } finally { bitmap.recycle() }
+            }
+            finished(result)
+        }
+    }
+    fun clearFocusText(context: Context, hadFocus: Boolean, finished: (Result<Unit>) -> Unit) {
+        val c = context.applicationContext
+        worker.execute {
+            val result = runCatching {
+                val store = Store(c)
+                if (!WallpaperResetPolicy.shouldClear(store.focusWallpaperState, hadFocus,
+                        store.wallpaperEnabled, store.selected.isNotEmpty())) return@runCatching
+                val bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+                try {
+                    bitmap.eraseColor(store.appliedWallpaperColor)
+                    applyToBoth(c, bitmap)
+                    store.focusWallpaperState = 0
+                } finally { bitmap.recycle() }
+            }
+            finished(result)
+        }
+    }
+
     fun render(text: String, width: Int, height: Int, background: Int = WallpaperPalette.colors.first().second): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
