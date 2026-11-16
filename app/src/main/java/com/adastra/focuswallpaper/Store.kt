@@ -11,6 +11,7 @@ data class Task(
     var done: Boolean = false, var minutes: Int = 25,
     val categoryId: String = DEFAULT_CATEGORY, val deletedAt: Long = 0
 ) {
+    val hasTimer: Boolean get() = minutes > 0
     fun trash(now: Long) = copy(deletedAt = now.coerceAtLeast(1))
     fun restore() = copy(deletedAt = 0)
 }
@@ -24,7 +25,7 @@ object TaskCodec {
             val o = array.optJSONObject(index) ?: return@mapNotNull null
             val id = o.optString("id")
             if (id.isEmpty()) null else Task(id, o.optString("text"), o.optBoolean("done"),
-                o.optInt("minutes", 25).coerceIn(1, 180), o.optString("categoryId", DEFAULT_CATEGORY), o.optLong("deletedAt", 0))
+                o.optInt("minutes", 25).coerceIn(0, 180), o.optString("categoryId", DEFAULT_CATEGORY), o.optLong("deletedAt", 0))
         }.toMutableList()
     }
     fun encode(tasks: List<Task>): String = JSONArray().apply {
@@ -44,8 +45,8 @@ class Store(context: Context) {
         get() = TimerState(prefs.getString("status", "idle").orEmpty(), prefs.getLong("end", 0), prefs.getLong("remaining", 0), prefs.getString("title", "").orEmpty(), prefs.getString("timerTaskId", "").orEmpty())
         set(value) { prefs.edit().putString("status", value.status).putLong("end", value.endAt).putLong("remaining", value.pausedMs).putString("title", value.title).putString("timerTaskId", value.taskId).commit() }
     var lastMinutes: Int
-        get() = prefs.getInt("lastMinutes", presets[1]).coerceIn(1, 180)
-        set(value) { require(value in 1..180); prefs.edit().putInt("lastMinutes", value).commit() }
+        get() = prefs.getInt("lastMinutes", presets[1]).coerceIn(0, 180)
+        set(value) { require(value in 0..180); prefs.edit().putInt("lastMinutes", value).commit() }
     var wallpaperEnabled: Boolean
         get() = prefs.getBoolean("wallpaperEnabled", true)
         set(value) { prefs.edit().putBoolean("wallpaperEnabled", value).commit() }
@@ -56,10 +57,10 @@ class Store(context: Context) {
         get() = runCatching {
             val a = JSONArray(prefs.getString("presets", "[5,25,60]"))
             require(a.length() == 3)
-            (0..2).map { a.getInt(it).also { n -> require(n in 1..180) } }
+            (0..2).map { a.getInt(it).also { n -> require(n in 0..180) } }
         }.getOrDefault(listOf(5, 25, 60))
         set(value) {
-            require(value.size == 3 && value.all { it in 1..180 })
+            require(value.size == 3 && value.all { it in 0..180 })
             prefs.edit().putString("presets", JSONArray(value).toString()).commit()
         }
     fun categories(): List<TaskCategory> = runCatching {

@@ -29,4 +29,14 @@ class TaskCodecTest {
         assertEquals("수학", reloaded[0].text)
         assertEquals(second, reloaded[1])
     }
+    @Test fun zeroMinutesRemainTimerFreeAfterReloadAndRestore() {
+        val json = """[{"id":"zero","text":"시간 없는 할 일","done":false,"minutes":0}]"""
+        val task = TaskCodec.decode(json).single()
+        assertEquals(0, task.minutes)
+        assertFalse(task.hasTimer)
+        val reloaded = TaskCodec.decode(TaskCodec.encode(listOf(task.trash(100)))).single().restore()
+        assertEquals(task, reloaded)
+        assertFalse(reloaded.hasTimer)
+        assertTrue(task.copy(minutes = 1).hasTimer)
+    }
 }

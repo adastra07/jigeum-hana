@@ -16,6 +16,8 @@ import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.*
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.text.InputFilter
 import android.text.InputType
 import android.text.TextUtils
@@ -169,7 +171,7 @@ class MainActivity : Activity() {
             isFocusable = true; background = ripple(Color.TRANSPARENT)
             setOnClickListener { editTask(task) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        line.addView(flat(task.minutes.toString(), color = muted) {
+        if (task.hasTimer) line.addView(flat(task.minutes.toString(), color = muted) {
             store.tasks().firstOrNull { it.id == task.id && it.deletedAt == 0L }?.let { selectTask(it, true) }
         }.apply {
             textSize = 14f; setPadding(0, 0, 0, 0)
@@ -235,18 +237,22 @@ class MainActivity : Activity() {
         if (index < 0) tasks.add(task) else tasks[index] = task
         store.saveTasks(tasks)
         store.lastMinutes = task.minutes
-        if (store.timer.taskId == task.id && store.timer.title != task.text) { store.timer = store.timer.copy(title = task.text); TimerEngine.sync(this) }
+        if (store.timer.taskId == task.id) {
+            if (!task.hasTimer) TimerEngine.stop(this)
+            else if (store.timer.title != task.text) { store.timer = store.timer.copy(title = task.text); TimerEngine.sync(this) }
+        }
         renderPage()
     }
     private fun selectTask(task: Task, run: Boolean, onApplied: () -> Unit = {}) {
-        val replace = active() && (run || store.timer.taskId != task.id)
+        val startTimer = run && task.hasTimer
+        val replace = active() && (startTimer || !task.hasTimer || store.timer.taskId != task.id)
         val apply = {
             persist(task)
-            if (replace || run) TimerEngine.stop(this)
+            if (replace || startTimer) TimerEngine.stop(this)
             store.selected = task.id
-            if (run) store.timer = TimerState("running", System.currentTimeMillis() + task.minutes * 60000L, title = task.text, taskId = task.id)
+            if (startTimer) store.timer = TimerState("running", System.currentTimeMillis() + task.minutes * 60000L, title = task.text, taskId = task.id)
             TimerEngine.sync(this); renderPage(); onApplied(); applyWallpaper(task.text)
-            if (run) requestNotifications()
+            if (startTimer) requestNotifications()
         }
         if (replace) AlertDialog.Builder(this).setTitle("현재 집중을 종료할까요?").setMessage("기존 타이머를 종료하고 집중할 일을 바꿉니다.")
             .setNegativeButton("취소", null).setPositiveButton("변경") { _, _ -> apply() }.show()
@@ -286,6 +292,16 @@ class MainActivity : Activity() {
         val choose = flat("집중 선택", Color.rgb(239, 242, 239), Color.rgb(86, 110, 97)) {}
         val start = flat("집중 시작", Color.rgb(220, 232, 223), Color.rgb(54, 87, 68)) {}
         action(choices, choose); action(choices, start)
+        fun updateStartButton() {
+            val duration = minutes.text.toString().toIntOrNull()
+            start.visibility = if (duration != null && duration in 1..180) View.VISIBLE else View.GONE
+        }
+        minutes.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) { updateStartButton() }
+        })
+        updateStartButton()
         val builder = AlertDialog.Builder(this).setTitle(if (original == null) "새 할 일" else "할 일 편집")
             .setView(ScrollView(this).apply { addView(body) }).setNegativeButton("닫기", null).setPositiveButton("저장", null)
         if (original != null) builder.setNeutralButton("휴지통", null)
@@ -293,7 +309,7 @@ class MainActivity : Activity() {
         fun read(): Task? {
             val value = title.text.toString().trim(); val duration = minutes.text.toString().toIntOrNull()
             if (value.isEmpty()) { title.error = "할 일을 입력해 주세요"; return null }
-            if (duration == null || duration !in 1..180) { minutes.error = "1~180분"; return null }
+            if (duration == null || duration !in 0..180) { minutes.error = "0~180분"; return null }
             return draft.copy(text = value, minutes = duration, categoryId = categories[category.selectedItemPosition].id)
         }
         fun close() { getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(title.windowToken, 0); dialog.dismiss() }
@@ -344,8 +360,8 @@ class MainActivity : Activity() {
             gap(card, 4)
             card.addView(flat("프리셋 저장", soft, accent) {
                 val values = inputs.map { it.text.toString().toIntOrNull() }
-                val invalid = values.indexOfFirst { it == null || it !in 1..180 }
-                if (invalid >= 0) inputs[invalid].error = "1~180분"
+                val invalid = values.indexOfFirst { it == null || it !in 0..180 }
+                if (invalid >= 0) inputs[invalid].error = "0~180분"
                 else { store.presets = values.filterNotNull(); getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(inputs[0].windowToken, 0); toast("저장했습니다") }
             }, LinearLayout.LayoutParams(-1, dp(38)))
         }
@@ -358,7 +374,7 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.8.1", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 1.9", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
@@ -395,7 +411,7 @@ class MainActivity : Activity() {
     private fun settingsInfo(key: String) {
         val title = when (key) { "presets" -> "집중 시간 프리셋"; "notifications" -> "알림"; else -> "배경화면" }
         val message = when (key) {
-            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 1~180분으로 설정한 뒤 저장해 주세요.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다."
+            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다."
             "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
             else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 기존 배경화면을 자동으로 복원하지는 않습니다."
         }
