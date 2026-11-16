@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var timerPanel: LinearLayout
     private lateinit var focus: TextView
     private lateinit var clock: TextView
+    private lateinit var restart: TextView
     private lateinit var pause: TextView
     private lateinit var navigation: LinearLayout
     private var screen = "tasks"
@@ -45,7 +46,7 @@ class MainActivity : Activity() {
     private var wallpaperBusy = false
     private val tick = object : Runnable {
         override fun run() {
-            if (store.timer.status == "running" && store.timer.remaining(System.currentTimeMillis()) == 0L) TimerEngine.finish(this@MainActivity)
+            if (!store.timer.isStopwatch && store.timer.status == "running" && store.timer.remaining(System.currentTimeMillis()) == 0L) TimerEngine.finish(this@MainActivity)
             if (renderedSelection != store.selected) renderPage() else updateFocus()
             handler.postDelayed(this, 500)
         }
@@ -77,6 +78,12 @@ class MainActivity : Activity() {
         timerPanel.addView(focus, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 20f, accent).apply { typeface = Typeface.MONOSPACE; setPadding(dp(8), 0, dp(6), 0) }
         timerPanel.addView(clock)
+        restart = flat("") { TimerEngine.restart(this); updateFocus() }.apply {
+            setPadding(dp(13), 0, dp(13), 0); contentDescription = "스탑워치 재시작"
+            val icon = getDrawable(R.drawable.ic_restart)!!.mutate().apply { setTint(accent); setBounds(0, 0, dp(18), dp(18)) }
+            setCompoundDrawables(icon, null, null, null)
+        }
+        timerPanel.addView(restart, LinearLayout.LayoutParams(dp(44), dp(44)))
         pause = flat("") { togglePause() }.apply { setPadding(dp(13), 0, dp(13), 0) }
         timerPanel.addView(pause, LinearLayout.LayoutParams(dp(44), dp(44)))
         timerPanel.addView(flat("×") { clearFocus() }.apply { textSize = 24f; contentDescription = "집중 해제" }, LinearLayout.LayoutParams(dp(44), dp(44)))
@@ -93,7 +100,13 @@ class MainActivity : Activity() {
         val timer = store.timer
         timerPanel.visibility = if (timer.status in listOf("running", "paused", "finished")) View.VISIBLE else View.GONE
         focus.text = timer.title
-        clock.text = if (timer.status == "finished") "완료" else TimerEngine.formatTime(timer.remaining(System.currentTimeMillis()))
+        clock.text = when {
+            timer.isStopwatch -> TimerEngine.formatElapsed(TimerEngine.elapsed(this, timer))
+            timer.status == "finished" -> "완료"
+            else -> TimerEngine.formatTime(timer.remaining(System.currentTimeMillis()))
+        }
+        clock.textSize = if (timer.isStopwatch && clock.text.length > 5) 18f else 20f
+        restart.visibility = if (timer.isStopwatch && active()) View.VISIBLE else View.GONE
         pause.visibility = if (active()) View.VISIBLE else View.GONE
         val pauseIcon = if (timer.status == "paused") R.drawable.ic_play else R.drawable.ic_pause
         if (pause.tag != pauseIcon) {
@@ -102,9 +115,9 @@ class MainActivity : Activity() {
         }
         pause.contentDescription = if (timer.status == "paused") "집중 재개" else "집중 일시정지"
         clock.contentDescription = when (timer.status) {
-            "paused" -> "일시정지, 남은 시간 ${clock.text}"
+            "paused" -> "일시정지, ${if (timer.isStopwatch) "경과" else "남은"} 시간 ${clock.text}"
             "finished" -> "집중 시간 완료"
-            else -> "남은 시간 ${clock.text}"
+            else -> "${if (timer.isStopwatch) "경과" else "남은"} 시간 ${clock.text}"
         }
     }
     private fun clearFocus() {
@@ -114,10 +127,8 @@ class MainActivity : Activity() {
         renderPage()
     }
     private fun togglePause() {
-        val timer = store.timer; val now = System.currentTimeMillis()
-        if (timer.status == "running" && timer.remaining(now) == 0L) TimerEngine.finish(this)
-        else store.timer = if (timer.status == "running") timer.pause(now) else timer.resume(now)
-        TimerEngine.sync(this); updateFocus()
+        if (store.timer.status == "running") TimerEngine.pause(this) else TimerEngine.resume(this)
+        updateFocus()
     }
     private fun renderPage() {
         page.removeAllViews()
@@ -178,12 +189,16 @@ class MainActivity : Activity() {
             isFocusable = true; background = ripple(Color.TRANSPARENT)
             setOnClickListener { editTask(task) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        if (task.hasTimer) line.addView(flat(task.minutes.toString(), color = muted) {
+        if (task.hasClock) line.addView(flat(if (task.stopwatch) "" else task.minutes.toString(), color = muted) {
             store.tasks().firstOrNull { it.id == task.id && it.deletedAt == 0L }?.let { selectTask(it, true) }
         }.apply {
             textSize = 14f; setPadding(0, 0, 0, 0)
             background = RippleDrawable(ColorStateList.valueOf(soft), InsetDrawable(shape(Color.TRANSPARENT, 4, muted), dp(4), dp(10), dp(4), dp(10)), null)
-            contentDescription = "${task.text}, ${task.minutes}분 집중 시작"
+            if (task.stopwatch) {
+                val icon = getDrawable(R.drawable.ic_stopwatch)!!.mutate().apply { setTint(muted); setBounds(0, 0, dp(18), dp(18)) }
+                setCompoundDrawables(icon, null, null, null); setPadding(dp(15), 0, dp(15), 0)
+                contentDescription = "${task.text}, 스탑워치 시작, 저장된 시간 ${TimerEngine.formatElapsed(TimerEngine.taskElapsed(this@MainActivity, task))}"
+            } else contentDescription = "${task.text}, ${task.minutes}분 집중 시작"
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         line.addView(flat("×", color = muted) { trashTask(task) }.apply {
             textSize = 23f; setPadding(0, 0, 0, 0); contentDescription = "${task.text} 휴지통으로 이동"
@@ -239,33 +254,37 @@ class MainActivity : Activity() {
             }.show().apply { getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(muted) }
     }
     private fun persist(task: Task) {
+        val currentTimer = store.timer
+        if (currentTimer.taskId == task.id && (!task.hasClock || currentTimer.isStopwatch != task.stopwatch)) TimerEngine.stop(this)
         val tasks = store.tasks(); val index = tasks.indexOfFirst { it.id == task.id }
-        if (index < 0) tasks.add(task) else tasks[index] = task
+        val old = tasks.firstOrNull { it.id == task.id }
+        val saved = task.copy(stopwatchMs = if (old != null) TimerEngine.taskElapsed(this, old) else task.stopwatchMs)
+        if (index < 0) tasks.add(saved) else tasks[index] = saved
         store.saveTasks(tasks)
-        store.lastMinutes = task.minutes
-        if (store.timer.taskId == task.id) {
-            if (!task.hasTimer) TimerEngine.stop(this)
-            else if (store.timer.title != task.text) { store.timer = store.timer.copy(title = task.text); TimerEngine.sync(this) }
+        store.lastStopwatch = saved.stopwatch
+        if (!saved.stopwatch) store.lastMinutes = saved.minutes
+        if (store.timer.taskId == saved.id && store.timer.title != saved.text) {
+            store.timer = store.timer.copy(title = saved.text); TimerEngine.sync(this)
         }
         renderPage()
     }
     private fun selectTask(task: Task, run: Boolean, onApplied: () -> Unit = {}) {
-        val startTimer = run && task.hasTimer
-        val replace = active() && (startTimer || !task.hasTimer || store.timer.taskId != task.id)
+        val startClock = run && task.hasClock
+        val replace = active() && (startClock || !task.hasClock || store.timer.taskId != task.id || store.timer.isStopwatch != task.stopwatch)
         val apply = {
             persist(task)
-            if (replace || startTimer) TimerEngine.stop(this)
+            if (replace && !startClock) TimerEngine.stop(this)
             store.selected = task.id
-            if (startTimer) store.timer = TimerState("running", System.currentTimeMillis() + task.minutes * 60000L, title = task.text, taskId = task.id)
+            if (startClock) TimerEngine.start(this, task)
             TimerEngine.sync(this); renderPage(); onApplied(); applyWallpaper(task.text)
-            if (startTimer) requestNotifications()
+            if (startClock) requestNotifications()
         }
         if (replace) AlertDialog.Builder(this).setTitle("현재 집중을 종료할까요?").setMessage("기존 타이머를 종료하고 집중할 일을 바꿉니다.")
             .setNegativeButton("취소", null).setPositiveButton("변경") { _, _ -> apply() }.show()
         else apply()
     }
     private fun editTask(original: Task?) {
-        val draft = original?.copy() ?: Task(text = "", minutes = store.lastMinutes, categoryId = store.category)
+        val draft = original?.copy() ?: Task(text = "", minutes = store.lastMinutes, categoryId = store.category, stopwatch = store.lastStopwatch)
         val body = column().apply { setPadding(dp(20), dp(4), dp(20), dp(6)) }
         val title = EditText(this).apply {
             setText(draft.text); hint = "어떤 일에 집중할까요?"; textSize = 18f
@@ -274,9 +293,17 @@ class MainActivity : Activity() {
         }
         body.addView(title); body.addView(text("집중 시간", 13f, muted))
         val minutes = numberInput(draft.minutes)
+        var stopwatchMode = draft.stopwatch
+        val unassigned = flat("미지정", color = muted) {}.apply { textSize = 12f; isSingleLine = true; setPadding(dp(7), 0, dp(7), 0)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
+        val stopwatchChoice = flat("스탑워치", color = muted) {}.apply { textSize = 12f; isSingleLine = true; setPadding(dp(7), 0, dp(7), 0)
+            setAutoSizeTextTypeUniformWithConfiguration(10, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
         row(body).apply {
-            addView(minutes, LinearLayout.LayoutParams(dp(80), dp(46)))
-            addView(text("분", 14f, muted).apply { setPadding(dp(8), 0, 0, 0) })
+            addView(minutes, LinearLayout.LayoutParams(dp(64), dp(46)))
+            addView(text("분", 14f, muted).apply { setPadding(dp(4), 0, dp(4), 0) })
+            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(unassigned, LinearLayout.LayoutParams(dp(58), dp(34)).apply { marginEnd = dp(4) })
+            addView(stopwatchChoice, LinearLayout.LayoutParams(dp(70), dp(34)))
         }
         gap(body, 8)
         row(body).apply {
@@ -285,6 +312,8 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams(0, dp(38), 1f).apply { if (index < 2) marginEnd = dp(10) })
             }
         }
+        val savedStopwatch = text("저장된 시간 · ${TimerEngine.formatElapsed(TimerEngine.taskElapsed(this, draft))}", 12f, muted)
+        body.addView(savedStopwatch)
         gap(body, 12)
         body.addView(text("분류", 13f, muted))
         val categories = store.categories()
@@ -301,13 +330,22 @@ class MainActivity : Activity() {
         action(choices, choose); action(choices, start)
         fun updateStartButton() {
             val duration = minutes.text.toString().toIntOrNull()
-            start.visibility = if (duration != null && duration in 1..180) View.VISIBLE else View.GONE
+            start.visibility = if (stopwatchMode || (duration != null && duration in 1..180)) View.VISIBLE else View.GONE
+            start.text = if (stopwatchMode) "스탑워치 시작" else "집중 시작"
+            stopwatchChoice.background = ripple(if (stopwatchMode) soft else Color.TRANSPARENT)
+            unassigned.background = ripple(if (!stopwatchMode && duration == 0) soft else Color.TRANSPARENT)
+            stopwatchChoice.isSelected = stopwatchMode
+            unassigned.isSelected = !stopwatchMode && duration == 0
+            minutes.alpha = if (stopwatchMode) .55f else 1f
+            savedStopwatch.visibility = if (stopwatchMode) View.VISIBLE else View.GONE
         }
         minutes.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) { updateStartButton() }
+            override fun afterTextChanged(s: Editable?) { stopwatchMode = false; updateStartButton() }
         })
+        unassigned.setOnClickListener { stopwatchMode = false; minutes.setText("0"); updateStartButton() }
+        stopwatchChoice.setOnClickListener { stopwatchMode = true; updateStartButton() }
         updateStartButton()
         val builder = AlertDialog.Builder(this).setTitle(if (original == null) "새 할 일" else "할 일 편집")
             .setView(ScrollView(this).apply { addView(body) }).setNegativeButton("닫기", null).setPositiveButton("저장", null)
@@ -316,8 +354,9 @@ class MainActivity : Activity() {
         fun read(): Task? {
             val value = title.text.toString().trim(); val duration = minutes.text.toString().toIntOrNull()
             if (value.isEmpty()) { title.error = "할 일을 입력해 주세요"; return null }
-            if (duration == null || duration !in 0..180) { minutes.error = "0~180분"; return null }
-            return draft.copy(text = value, minutes = duration, categoryId = categories[category.selectedItemPosition].id)
+            if (!stopwatchMode && (duration == null || duration !in 0..180)) { minutes.error = "0~180분"; return null }
+            return draft.copy(text = value, minutes = (duration ?: draft.minutes).coerceIn(0, 180),
+                categoryId = categories[category.selectedItemPosition].id, stopwatch = stopwatchMode)
         }
         fun close() { getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(title.windowToken, 0); dialog.dismiss() }
         dialog.setOnShowListener {
@@ -384,7 +423,7 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.11", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 1.12", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
@@ -421,7 +460,7 @@ class MainActivity : Activity() {
     private fun settingsInfo(key: String) {
         val title = when (key) { "presets" -> "집중 시간 프리셋"; "notifications" -> "알림"; else -> "배경화면" }
         val message = when (key) {
-            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다."
+            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
             "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
             else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 집중 해제 시에는 할 일 문구를 지우고 적용했던 배경색만 남깁니다. 기존 배경 사진을 복원하지는 않습니다."
         }

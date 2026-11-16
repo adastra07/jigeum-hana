@@ -1,6 +1,7 @@
 package com.adastra.focuswallpaper
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -9,9 +10,11 @@ const val DEFAULT_CATEGORY = "default"
 data class Task(
     val id: String = UUID.randomUUID().toString(), var text: String,
     var done: Boolean = false, var minutes: Int = 25,
-    val categoryId: String = DEFAULT_CATEGORY, val deletedAt: Long = 0
+    val categoryId: String = DEFAULT_CATEGORY, val deletedAt: Long = 0,
+    val stopwatch: Boolean = false, val stopwatchMs: Long = 0
 ) {
-    val hasTimer: Boolean get() = minutes > 0
+    val hasTimer: Boolean get() = !stopwatch && minutes > 0
+    val hasClock: Boolean get() = stopwatch || hasTimer
     fun trash(now: Long) = copy(deletedAt = now.coerceAtLeast(1))
     fun restore() = copy(deletedAt = 0)
 }
@@ -25,12 +28,13 @@ object TaskCodec {
             val o = array.optJSONObject(index) ?: return@mapNotNull null
             val id = o.optString("id")
             if (id.isEmpty()) null else Task(id, o.optString("text"), o.optBoolean("done"),
-                o.optInt("minutes", 25).coerceIn(0, 180), o.optString("categoryId", DEFAULT_CATEGORY), o.optLong("deletedAt", 0))
+                o.optInt("minutes", 25).coerceIn(0, 180), o.optString("categoryId", DEFAULT_CATEGORY), o.optLong("deletedAt", 0),
+                o.optBoolean("stopwatch", false), o.optLong("stopwatchMs", 0).coerceAtLeast(0))
         }.toMutableList()
     }
     fun encode(tasks: List<Task>): String = JSONArray().apply {
         tasks.forEach { put(JSONObject().put("id", it.id).put("text", it.text).put("done", it.done)
-            .put("minutes", it.minutes).put("categoryId", it.categoryId).put("deletedAt", it.deletedAt)) }
+            .put("minutes", it.minutes).put("categoryId", it.categoryId).put("deletedAt", it.deletedAt).put("stopwatch", it.stopwatch).put("stopwatchMs", it.stopwatchMs)) }
     }.toString()
 }
 class Store(context: Context) {
@@ -42,8 +46,22 @@ class Store(context: Context) {
         get() = prefs.getString("category", DEFAULT_CATEGORY).orEmpty()
         set(value) { prefs.edit().putString("category", value).commit() }
     var timer: TimerState
-        get() = TimerState(prefs.getString("status", "idle").orEmpty(), prefs.getLong("end", 0), prefs.getLong("remaining", 0), prefs.getString("title", "").orEmpty(), prefs.getString("timerTaskId", "").orEmpty())
-        set(value) { prefs.edit().putString("status", value.status).putLong("end", value.endAt).putLong("remaining", value.pausedMs).putString("title", value.title).putString("timerTaskId", value.taskId).commit() }
+        get() = TimerState(prefs.getString("status", "idle").orEmpty(), prefs.getLong("end", 0),
+            prefs.getLong("remaining", 0), prefs.getString("title", "").orEmpty(), prefs.getString("timerTaskId", "").orEmpty(),
+            prefs.getString("timerMode", "timer").orEmpty(), prefs.getLong("stopwatchElapsed", 0),
+            prefs.getLong("stopwatchStarted", 0), prefs.getLong("stopwatchRealtime", -1), prefs.getInt("stopwatchBoot", -1))
+        set(value) { timerEditor(value).commit() }
+    private fun timerEditor(value: TimerState): SharedPreferences.Editor = prefs.edit()
+        .putString("status", value.status).putLong("end", value.endAt).putLong("remaining", value.pausedMs)
+        .putString("title", value.title).putString("timerTaskId", value.taskId).putString("timerMode", value.mode)
+        .putLong("stopwatchElapsed", value.elapsedMs).putLong("stopwatchStarted", value.startedAt)
+        .putLong("stopwatchRealtime", value.startedRealtime).putInt("stopwatchBoot", value.bootCount)
+    fun saveTimerAndTasks(value: TimerState, tasks: List<Task>) {
+        timerEditor(value).putString("tasks", TaskCodec.encode(tasks)).commit()
+    }
+    var lastStopwatch: Boolean
+        get() = prefs.getBoolean("lastStopwatch", false)
+        set(value) { prefs.edit().putBoolean("lastStopwatch", value).commit() }
     var lastMinutes: Int
         get() = prefs.getInt("lastMinutes", presets[1]).coerceIn(0, 180)
         set(value) { require(value in 0..180); prefs.edit().putInt("lastMinutes", value).commit() }
