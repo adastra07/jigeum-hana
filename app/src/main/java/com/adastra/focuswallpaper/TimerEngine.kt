@@ -41,7 +41,7 @@ object TimerEngine {
             .setContentIntent(open(c)).setVisibility(Notification.VISIBILITY_PUBLIC).setOngoing(true).setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_ALARM).setShowWhen(running).setUsesChronometer(running).setChronometerCountDown(running)
             .addAction(Notification.Action.Builder(null as Icon?, if (running) "일시정지" else "재개", pending(c, if (running) "pause" else "resume", 1)).build())
-            .addAction(Notification.Action.Builder(null as Icon?, "종료", pending(c, "stop", 2)).build())
+            .addAction(Notification.Action.Builder(null as Icon?, "집중 해제", pending(c, "stop", 2)).build())
         if (running) builder.setWhen(timer.endAt)
         manager(c).notify(100, builder.build())
     }
@@ -54,6 +54,7 @@ object TimerEngine {
         alarm(c).cancel(pending(c, "finish", 0)); manager(c).cancel(100); channels(c)
         if (notificationsAllowed(c)) manager(c).notify(101, Notification.Builder(c, FINISHED).setSmallIcon(R.drawable.ic_focus).setContentTitle("집중 시간 완료").setContentText(timer.title).setAutoCancel(true).setVisibility(Notification.VISIBILITY_PUBLIC).setContentIntent(open(c)).build())
     }
+    fun clearFocus(c: Context) { Store(c).selected = ""; stop(c) }
     fun stop(c: Context) { Store(c).timer = TimerState(); manager(c).cancel(101); sync(c) }
     fun formatTime(ms: Long): String { val seconds = (ms.coerceAtLeast(0) + 999) / 1000; return String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60) }
 }
@@ -64,7 +65,7 @@ class TimerReceiver : BroadcastReceiver() {
         val now = System.currentTimeMillis()
         when (intent.action) {
             "finish" -> { TimerEngine.finish(context); return }
-            "stop" -> { TimerEngine.stop(context); return }
+            "stop" -> { TimerEngine.clearFocus(context); return }
             "pause" -> {
                 if (store.timer.status == "running" && store.timer.remaining(now) == 0L) { TimerEngine.finish(context); return }
                 store.timer = store.timer.pause(now)

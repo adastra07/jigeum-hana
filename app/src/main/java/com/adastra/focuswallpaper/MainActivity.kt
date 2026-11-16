@@ -41,13 +41,15 @@ class MainActivity : Activity() {
     private lateinit var pause: TextView
     private lateinit var navigation: LinearLayout
     private var screen = "tasks"
+    private var renderedSelection: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private var wallpaperBusy = false
     private val tick = object : Runnable {
         override fun run() {
             if (store.timer.status == "running" && store.timer.remaining(System.currentTimeMillis()) == 0L) TimerEngine.finish(this@MainActivity)
-            updateFocus(); handler.postDelayed(this, 500)
+            if (renderedSelection != store.selected) renderPage() else updateFocus()
+            handler.postDelayed(this, 500)
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +81,7 @@ class MainActivity : Activity() {
         timerPanel.addView(clock)
         pause = flat("") { togglePause() }.apply { setPadding(dp(13), 0, dp(13), 0) }
         timerPanel.addView(pause, LinearLayout.LayoutParams(dp(44), dp(44)))
-        timerPanel.addView(flat("×") { TimerEngine.stop(this); updateFocus() }.apply { textSize = 24f; contentDescription = "집중 종료" }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        timerPanel.addView(flat("×") { clearFocus() }.apply { textSize = 24f; contentDescription = "집중 해제" }, LinearLayout.LayoutParams(dp(44), dp(44)))
         page = column().apply { setPadding(dp(16), 0, dp(16), dp(16)) }
         root.addView(ScrollView(this).apply { isFillViewport = true; addView(page) }, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(View(this).apply { setBackgroundColor(Color.rgb(229, 232, 229)) }, LinearLayout.LayoutParams(-1, dp(1)))
@@ -107,6 +109,10 @@ class MainActivity : Activity() {
             else -> "남은 시간 ${clock.text}"
         }
     }
+    private fun clearFocus() {
+        TimerEngine.clearFocus(this)
+        renderPage()
+    }
     private fun togglePause() {
         val timer = store.timer; val now = System.currentTimeMillis()
         if (timer.status == "running" && timer.remaining(now) == 0L) TimerEngine.finish(this)
@@ -127,6 +133,7 @@ class MainActivity : Activity() {
                 isSelected = chosen
             }, LinearLayout.LayoutParams(0, -1, 1f))
         }
+        renderedSelection = store.selected
         updateFocus()
     }
     private fun renderTasks() {
@@ -289,7 +296,8 @@ class MainActivity : Activity() {
         body.addView(category, LinearLayout.LayoutParams(-1, dp(48)))
         gap(body, 12)
         val choices = row(body)
-        val choose = flat("집중 선택", Color.rgb(239, 242, 239), Color.rgb(86, 110, 97)) {}
+        val alreadySelected = store.selected == draft.id
+        val choose = flat(if (alreadySelected) "집중 해제" else "집중 선택", Color.rgb(239, 242, 239), Color.rgb(86, 110, 97)) {}
         val start = flat("집중 시작", Color.rgb(220, 232, 223), Color.rgb(54, 87, 68)) {}
         action(choices, choose); action(choices, start)
         fun updateStartButton() {
@@ -315,7 +323,10 @@ class MainActivity : Activity() {
         fun close() { getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(title.windowToken, 0); dialog.dismiss() }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { read()?.let { persist(it); close() } }
-            choose.setOnClickListener { read()?.let { selectTask(it, false) { close() } } }
+            choose.setOnClickListener {
+                if (alreadySelected) { clearFocus(); close() }
+                else read()?.let { selectTask(it, false) { close() } }
+            }
             start.setOnClickListener { read()?.let { selectTask(it, true) { close() } } }
             if (original != null) dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { trashTask(original) { close() } }
             dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
@@ -374,7 +385,7 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.9", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 1.10", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
