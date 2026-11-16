@@ -65,9 +65,12 @@ class MainActivity : Activity() {
         root.addView(heading)
         timerPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(2), dp(12), dp(8))
+            setPadding(dp(12), dp(4), dp(6), dp(4))
+            background = shape(Color.WHITE, 10, Color.rgb(222, 228, 223))
         }
-        root.addView(timerPanel)
+        root.addView(timerPanel, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(16), 0, dp(16), dp(12))
+        })
         focus = text("", 16f).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setTypeface(null, Typeface.BOLD) }
         timerPanel.addView(focus, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 20f, accent).apply { typeface = Typeface.MONOSPACE; setPadding(dp(8), 0, dp(6), 0) }
@@ -144,7 +147,7 @@ class MainActivity : Activity() {
         gap(page, 8)
         val card = card(page)
         val tasks = store.tasks().filter { it.deletedAt == 0L && it.categoryId == store.category }
-        if (tasks.isEmpty()) card.addView(text("할 일을 추가해 보세요", 14f, muted).apply { setPadding(dp(10), dp(14), dp(10), dp(14)) })
+        if (tasks.isEmpty()) card.addView(text("할 일을 추가해 주세요", 14f, muted).apply { setPadding(dp(10), dp(14), dp(10), dp(14)) })
         tasks.forEach { task -> taskRow(card, task) }
         gap(page, 12)
         page.addView(flat("+ 할 일 추가", soft, accent) { editTask(null) }, LinearLayout.LayoutParams(-1, dp(46)))
@@ -179,7 +182,11 @@ class MainActivity : Activity() {
     }
     private fun renderTrash() {
         val tasks = store.tasks().filter { it.deletedAt > 0 }.sortedByDescending { it.deletedAt }
-        if (tasks.isEmpty()) { page.addView(text("휴지통이 비어 있어요", 15f, muted).apply { setPadding(dp(8), dp(24), dp(8), 0) }); return }
+        if (tasks.isEmpty()) { page.addView(text("휴지통이 비어 있습니다", 15f, muted).apply { setPadding(dp(8), dp(24), dp(8), 0) }); return }
+        row(page).apply {
+            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(flat("휴지통 비우기", color = muted) { emptyTrash() }, LinearLayout.LayoutParams(-2, dp(44)))
+        }
         val card = card(page)
         tasks.forEach { task ->
             val line = row(card).apply { setPadding(dp(8), dp(4), 0, dp(4)) }
@@ -187,10 +194,14 @@ class MainActivity : Activity() {
             body.addView(text(task.text, 16f))
             body.addView(text(store.categories().firstOrNull { it.id == task.categoryId }?.name ?: "할 일", 12f, muted))
             line.addView(body, LinearLayout.LayoutParams(0, -2, 1f))
-            line.addView(flat("복원", color = accent) {
+            line.addView(flat("", color = muted) {
                 val tasksNow = store.tasks().map { if (it.id == task.id) it.restore() else it }
                 store.saveTasks(tasksNow); renderPage()
-            }, LinearLayout.LayoutParams(dp(52), dp(48)))
+            }.apply {
+                contentDescription = "${task.text} 복원"
+                val icon = getDrawable(R.drawable.ic_restore)!!.mutate().apply { setTint(muted); setBounds(0, 0, dp(22), dp(22)) }
+                setCompoundDrawables(icon, null, null, null); setPadding(dp(13), 0, dp(13), 0)
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
             line.addView(flat("×", color = muted) { permanentlyDelete(task) }.apply { textSize = 23f; contentDescription = "${task.text} 영구 삭제" }, LinearLayout.LayoutParams(dp(40), dp(48)))
         }
     }
@@ -206,10 +217,20 @@ class MainActivity : Activity() {
                 store.saveTasks(store.tasks().filterNot { it.id == task.id && it.deletedAt > 0 }); renderPage()
             }.show()
     }
+    private fun emptyTrash() {
+        val count = store.tasks().count { it.deletedAt > 0 }
+        if (count == 0) return
+        AlertDialog.Builder(this).setTitle("휴지통을 비울까요?")
+            .setMessage("${count}개 항목이 영구 삭제됩니다. 삭제한 항목은 복원할 수 없습니다.")
+            .setNegativeButton("취소", null).setPositiveButton("비우기") { _, _ ->
+                store.saveTasks(TrashOperations.empty(store.tasks())); renderPage(); toast("휴지통을 비웠습니다")
+            }.show().apply { getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(muted) }
+    }
     private fun persist(task: Task) {
         val tasks = store.tasks(); val index = tasks.indexOfFirst { it.id == task.id }
         if (index < 0) tasks.add(task) else tasks[index] = task
         store.saveTasks(tasks)
+        store.lastMinutes = task.minutes
         if (store.timer.taskId == task.id && store.timer.title != task.text) { store.timer = store.timer.copy(title = task.text); TimerEngine.sync(this) }
         renderPage()
     }
@@ -228,7 +249,7 @@ class MainActivity : Activity() {
         else apply()
     }
     private fun editTask(original: Task?) {
-        val draft = original?.copy() ?: Task(text = "", minutes = store.presets[1], categoryId = store.category)
+        val draft = original?.copy() ?: Task(text = "", minutes = store.lastMinutes, categoryId = store.category)
         val body = column().apply { setPadding(dp(20), dp(4), dp(20), dp(6)) }
         val title = EditText(this).apply {
             setText(draft.text); hint = "어떤 일에 집중할까요?"; textSize = 18f
@@ -238,9 +259,17 @@ class MainActivity : Activity() {
         body.addView(title); body.addView(text("집중 시간", 13f, muted))
         val minutes = numberInput(draft.minutes)
         row(body).apply {
-            addView(minutes, LinearLayout.LayoutParams(dp(64), dp(48))); addView(text("분", 14f, muted))
-            store.presets.forEach { n -> addView(flat(n.toString(), soft, accent) { minutes.setText(n.toString()) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(6) }) }
+            addView(minutes, LinearLayout.LayoutParams(dp(80), dp(46)))
+            addView(text("분", 14f, muted).apply { setPadding(dp(8), 0, 0, 0) })
         }
+        gap(body, 8)
+        row(body).apply {
+            store.presets.forEachIndexed { index, n ->
+                addView(flat(n.toString(), soft, accent) { minutes.setText(n.toString()) },
+                    LinearLayout.LayoutParams(0, dp(38), 1f).apply { if (index < 2) marginEnd = dp(10) })
+            }
+        }
+        gap(body, 12)
         body.addView(text("분류", 13f, muted))
         val categories = store.categories()
         val category = Spinner(this).apply {
@@ -250,7 +279,8 @@ class MainActivity : Activity() {
         body.addView(category, LinearLayout.LayoutParams(-1, dp(48)))
         gap(body, 12)
         val choices = row(body)
-        val choose = flat("집중 선택", soft, accent) {}; val start = flat("집중 시작", accent, Color.WHITE) {}
+        val choose = flat("집중 선택", Color.rgb(239, 242, 239), Color.rgb(86, 110, 97)) {}
+        val start = flat("집중 시작", Color.rgb(220, 232, 223), Color.rgb(54, 87, 68)) {}
         action(choices, choose); action(choices, start)
         val builder = AlertDialog.Builder(this).setTitle(if (original == null) "새 할 일" else "할 일 편집")
             .setView(ScrollView(this).apply { addView(body) }).setNegativeButton("닫기", null).setPositiveButton("저장", null)
@@ -258,7 +288,7 @@ class MainActivity : Activity() {
         val dialog = builder.create()
         fun read(): Task? {
             val value = title.text.toString().trim(); val duration = minutes.text.toString().toIntOrNull()
-            if (value.isEmpty()) { title.error = "할 일을 입력하세요"; return null }
+            if (value.isEmpty()) { title.error = "할 일을 입력해 주세요"; return null }
             if (duration == null || duration !in 1..180) { minutes.error = "1~180분"; return null }
             return draft.copy(text = value, minutes = duration, categoryId = categories[category.selectedItemPosition].id)
         }
@@ -279,7 +309,7 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = input.text.toString().trim()
-                if (name.isEmpty()) { input.error = "이름을 입력하세요"; return@setOnClickListener }
+                if (name.isEmpty()) { input.error = "이름을 입력해 주세요"; return@setOnClickListener }
                 if (store.categories().any { it.name == name && it.id != original?.id }) { input.error = "이미 있는 이름입니다"; return@setOnClickListener }
                 val updated = original?.copy(name = name) ?: TaskCategory(name = name)
                 store.saveCategories(if (original == null) store.categories() + updated else store.categories().map { if (it.id == original.id) updated else it })
@@ -298,27 +328,29 @@ class MainActivity : Activity() {
     }
     private fun renderSettings() {
         section("집중 시간 프리셋") { card ->
-            card.addView(text("새 할 일은 두 번째 값으로 시작합니다", 12f, muted))
+            card.addView(text("할 일 편집창에서 사용할 빠른 선택 시간입니다", 12f, muted))
+            gap(card, 8)
             val inputs = store.presets.map { numberInput(it) }
             row(card).apply {
                 inputs.forEachIndexed { index, input ->
-                    val box = column().apply { setPadding(dp(6), 0, dp(6), 0) }
-                    box.addView(text("${index + 1}번 · 분", 12f, muted)); box.addView(input, LinearLayout.LayoutParams(-1, dp(48)))
+                    val box = column().apply { setPadding(dp(8), dp(4), dp(8), dp(8)) }
+                    box.addView(text("${index + 1}번", 12f, muted)); box.addView(input, LinearLayout.LayoutParams(-1, dp(44))); box.addView(text("분", 12f, muted))
                     addView(box, LinearLayout.LayoutParams(0, -2, 1f))
                 }
             }
+            gap(card, 10)
             card.addView(flat("프리셋 저장", soft, accent) {
                 val values = inputs.map { it.text.toString().toIntOrNull() }
                 val invalid = values.indexOfFirst { it == null || it !in 1..180 }
                 if (invalid >= 0) inputs[invalid].error = "1~180분"
-                else { store.presets = values.filterNotNull(); getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(inputs[0].windowToken, 0); toast("저장했어요") }
+                else { store.presets = values.filterNotNull(); getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(inputs[0].windowToken, 0); toast("저장했습니다") }
             }, LinearLayout.LayoutParams(-1, dp(44)))
         }
         section("분류") { card ->
             store.categories().forEach { c -> card.addView(flat(c.name, color = ink) { categoryMenu(c) }.apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(44))) }
             card.addView(flat("+ 분류 추가", color = accent) { editCategory(null) }, LinearLayout.LayoutParams(-1, dp(44)))
         }
-        section("알림과 배경화면") { card ->
+        section("알림") { card ->
             settingRow(card, "앱 알림", if (TimerEngine.notificationsAllowed(this)) "허용됨" else "차단됨") {
                 openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
             }
@@ -328,9 +360,43 @@ class MainActivity : Activity() {
             settingRow(card, "잠금화면 알림 안내", "") {
                 AlertDialog.Builder(this).setTitle("잠금화면 알림").setMessage("휴대전화 설정에서 잠금화면 알림의 내용 표시를 허용하세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 강제 중지한 뒤에는 앱을 다시 열어 주세요.").setPositiveButton("확인", null).show()
             }
+        }
+        wallpaperSettings()
+        page.addView(text("지금 하나 1.6", 12f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, 0) })
+    }
+    private fun wallpaperSettings() {
+        section("배경화면") { card ->
+            row(card).apply {
+                addView(text("배경화면 자동 변경", 15f), LinearLayout.LayoutParams(0, -2, 1f))
+                addView(Switch(this@MainActivity).apply {
+                    isChecked = store.wallpaperEnabled; contentDescription = "배경화면 자동 변경"
+                    thumbTintList = ColorStateList.valueOf(Color.rgb(175, 198, 181))
+                    setOnCheckedChangeListener { _, checked -> store.wallpaperEnabled = checked }
+                }, LinearLayout.LayoutParams(dp(56), dp(48)))
+            }
+            card.addView(text("집중 선택·시작 시 홈과 잠금화면에 적용합니다", 12f, muted))
+            gap(card, 12)
+            WallpaperPalette.colors.chunked(4).forEach { colors ->
+                row(card).apply {
+                    colors.forEach { (name, color) ->
+                        val chosen = store.wallpaperColor == color
+                        val cell = column().apply {
+                            gravity = Gravity.CENTER; setPadding(dp(4), dp(8), dp(4), dp(6))
+                            background = ripple(if (chosen) soft else Color.TRANSPARENT)
+                            isClickable = true; isFocusable = true; isSelected = chosen
+                            contentDescription = "$name 배경색" + if (chosen) ", 선택됨" else ""
+                            addView(View(this@MainActivity).apply { background = shape(color, 6, if (chosen) accent else Color.rgb(211, 218, 213)) }, LinearLayout.LayoutParams(dp(42), dp(26)))
+                            addView(text(name, 12f, if (chosen) accent else muted))
+                            setOnClickListener { store.wallpaperColor = color; renderPage() }
+                        }
+                        addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+                    }
+                }
+                gap(card, 4)
+            }
+            gap(card, 6)
             settingRow(card, "홈·잠금화면 배경 미리보기", "") { preview() }
         }
-        page.addView(text("지금 하나 1.5", 12f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, 0) })
     }
     private fun settingRow(parent: LinearLayout, title: String, detail: String, action: () -> Unit) {
         parent.addView(flat(if (detail.isEmpty()) title else "$title  ·  $detail", color = ink, action = action).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(48)))
@@ -340,23 +406,24 @@ class MainActivity : Activity() {
         content(card(page).apply { setPadding(dp(12), dp(10), dp(12), dp(10)) })
     }
     @Suppress("DEPRECATION") private fun displaySize() = Point().also { windowManager.defaultDisplay.getRealSize(it) }
-    private fun applyWallpaper(title: String) {
-        val size = displaySize(); wallpaperBusy = true
+    private fun applyWallpaper(title: String, automatic: Boolean = true) {
+        if (automatic && !store.wallpaperEnabled) return
+        val size = displaySize(); val background = store.wallpaperColor; wallpaperBusy = true
         executor.execute {
             val result = runCatching {
-                val bitmap = WallpaperRenderer.render(title, size.x, size.y)
-                try { WallpaperRenderer.applyToBoth(this, bitmap) } finally { bitmap.recycle() }
+                val bitmap = WallpaperRenderer.render(title, size.x, size.y, background)
+                try { if (!automatic || store.wallpaperEnabled) WallpaperRenderer.applyToBoth(this, bitmap) } finally { bitmap.recycle() }
             }
-            runOnUiThread { if (!isDestroyed) { wallpaperBusy = false; result.exceptionOrNull()?.let { toast("배경화면 적용 실패: ${it.message}") } } }
+            runOnUiThread { if (!isDestroyed) { wallpaperBusy = false; result.exceptionOrNull()?.let { toast("배경화면을 적용하지 못했습니다") } } }
         }
     }
     private fun preview() {
         if (wallpaperBusy) return
         val task = selected() ?: run { toast("먼저 집중할 일을 선택해 주세요."); return }
         val size = displaySize(); val width = minOf(size.x, 540); val height = (size.y.toLong() * width / size.x).toInt()
-        val bitmap = WallpaperRenderer.render(task.text, width, height)
+        val bitmap = WallpaperRenderer.render(task.text, width, height, store.wallpaperColor)
         val image = ImageView(this).apply { setImageBitmap(bitmap); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
-        AlertDialog.Builder(this).setTitle("홈·잠금화면 미리보기").setView(image).setNegativeButton("취소", null).setPositiveButton("두 화면에 적용") { _, _ -> applyWallpaper(task.text) }.create().apply {
+        AlertDialog.Builder(this).setTitle("홈·잠금화면 미리보기").setView(image).setNegativeButton("취소", null).setPositiveButton("두 화면에 적용") { _, _ -> applyWallpaper(task.text, automatic = false) }.create().apply {
             setOnDismissListener { image.setImageDrawable(null); bitmap.recycle() }; show()
         }
     }

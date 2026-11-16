@@ -43,6 +43,15 @@ class Store(context: Context) {
     var timer: TimerState
         get() = TimerState(prefs.getString("status", "idle").orEmpty(), prefs.getLong("end", 0), prefs.getLong("remaining", 0), prefs.getString("title", "").orEmpty(), prefs.getString("timerTaskId", "").orEmpty())
         set(value) { prefs.edit().putString("status", value.status).putLong("end", value.endAt).putLong("remaining", value.pausedMs).putString("title", value.title).putString("timerTaskId", value.taskId).commit() }
+    var lastMinutes: Int
+        get() = prefs.getInt("lastMinutes", presets[1]).coerceIn(1, 180)
+        set(value) { require(value in 1..180); prefs.edit().putInt("lastMinutes", value).commit() }
+    var wallpaperEnabled: Boolean
+        get() = prefs.getBoolean("wallpaperEnabled", true)
+        set(value) { prefs.edit().putBoolean("wallpaperEnabled", value).commit() }
+    var wallpaperColor: Int
+        get() = prefs.getInt("wallpaperColor", WallpaperPalette.colors.first().second)
+        set(value) { prefs.edit().putInt("wallpaperColor", value).commit() }
     var presets: List<Int>
         get() = runCatching {
             val a = JSONArray(prefs.getString("presets", "[5,25,60]"))

@@ -8,11 +8,11 @@ import android.text.StaticLayout
 import android.text.TextPaint
 
 object WallpaperRenderer {
-    fun render(text: String, width: Int, height: Int): Bitmap {
+    fun render(text: String, width: Int, height: Int, background: Int = WallpaperPalette.colors.first().second): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.BLACK)
-        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; typeface = Typeface.create("sans-serif", Typeface.BOLD) }
+        canvas.drawColor(background)
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = WallpaperPalette.textColor(background); typeface = Typeface.create("sans-serif", Typeface.BOLD) }
         val textWidth = (width * .76f).toInt().coerceAtLeast(1)
         var size = width * .12f
         var layout: StaticLayout
