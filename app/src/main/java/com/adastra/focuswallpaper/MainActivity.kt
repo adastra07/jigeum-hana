@@ -61,7 +61,7 @@ class MainActivity : Activity() {
         }
         val root = column().apply { setBackgroundColor(canvas) }
         setContentView(root)
-        heading = text("", 26f).apply { setTypeface(null, Typeface.BOLD); setPadding(dp(20), dp(16), dp(20), dp(12)) }
+        heading = text("", 26f).apply { setTypeface(null, Typeface.BOLD); setPadding(dp(20), dp(12), dp(20), dp(8)) }
         root.addView(heading)
         timerPanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -75,14 +75,14 @@ class MainActivity : Activity() {
         timerPanel.addView(focus, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 20f, accent).apply { typeface = Typeface.MONOSPACE; setPadding(dp(8), 0, dp(6), 0) }
         timerPanel.addView(clock)
-        pause = flat("Ⅱ") { togglePause() }.apply { textSize = 20f }
+        pause = flat("") { togglePause() }.apply { setPadding(dp(12), 0, dp(12), 0) }
         timerPanel.addView(pause, LinearLayout.LayoutParams(dp(44), dp(44)))
         timerPanel.addView(flat("×") { TimerEngine.stop(this); updateFocus() }.apply { textSize = 24f; contentDescription = "집중 종료" }, LinearLayout.LayoutParams(dp(44), dp(44)))
         page = column().apply { setPadding(dp(16), 0, dp(16), dp(16)) }
         root.addView(ScrollView(this).apply { isFillViewport = true; addView(page) }, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(View(this).apply { setBackgroundColor(Color.rgb(229, 232, 229)) }, LinearLayout.LayoutParams(-1, dp(1)))
         navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE) }
-        root.addView(navigation, LinearLayout.LayoutParams(-1, dp(68)))
+        root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
         renderPage()
     }
     private fun active() = store.timer.status in listOf("running", "paused")
@@ -93,7 +93,11 @@ class MainActivity : Activity() {
         focus.text = timer.title
         clock.text = if (timer.status == "finished") "완료" else TimerEngine.formatTime(timer.remaining(System.currentTimeMillis()))
         pause.visibility = if (active()) View.VISIBLE else View.GONE
-        pause.text = if (timer.status == "paused") "▷" else "Ⅱ"
+        val pauseIcon = if (timer.status == "paused") R.drawable.ic_play else R.drawable.ic_pause
+        if (pause.tag != pauseIcon) {
+            val icon = getDrawable(pauseIcon)!!.mutate().apply { setTint(accent); setBounds(0, 0, dp(20), dp(20)) }
+            pause.setCompoundDrawables(icon, null, null, null); pause.tag = pauseIcon
+        }
         pause.contentDescription = if (timer.status == "paused") "집중 재개" else "집중 일시정지"
         clock.contentDescription = when (timer.status) {
             "paused" -> "일시정지, 남은 시간 ${clock.text}"
@@ -115,9 +119,9 @@ class MainActivity : Activity() {
         listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, icon) ->
             val chosen = screen == id
             navigation.addView(flat(label, color = if (chosen) accent else muted) { screen = id; renderPage() }.apply {
-                textSize = 11f; setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
-                val drawable = getDrawable(icon)!!.mutate().apply { setTint(if (chosen) accent else muted); setBounds(0, 0, dp(22), dp(22)) }
-                setCompoundDrawables(null, drawable, null, null); compoundDrawablePadding = dp(4)
+                textSize = 12f; setPadding(dp(12), dp(8), dp(12), dp(10)); setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
+                val drawable = getDrawable(icon)!!.mutate().apply { setTint(if (chosen) accent else muted); setBounds(0, 0, dp(24), dp(24)) }
+                setCompoundDrawables(null, drawable, null, null); compoundDrawablePadding = dp(6)
                 isSelected = chosen
             }, LinearLayout.LayoutParams(0, -1, 1f))
         }
@@ -327,83 +331,94 @@ class MainActivity : Activity() {
         }.show()
     }
     private fun renderSettings() {
-        section("집중 시간 프리셋") { card ->
-            card.addView(text("할 일 편집창에서 사용할 빠른 선택 시간입니다", 12f, muted))
-            gap(card, 8)
+        section("집중 시간 프리셋", { settingsInfo("presets") }) { card ->
             val inputs = store.presets.map { numberInput(it) }
             row(card).apply {
                 inputs.forEachIndexed { index, input ->
-                    val box = column().apply { setPadding(dp(8), dp(4), dp(8), dp(8)) }
-                    box.addView(text("${index + 1}번", 12f, muted)); box.addView(input, LinearLayout.LayoutParams(-1, dp(44))); box.addView(text("분", 12f, muted))
-                    addView(box, LinearLayout.LayoutParams(0, -2, 1f))
+                    val field = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    field.addView(input.apply { contentDescription = "${index + 1}번 프리셋 시간" }, LinearLayout.LayoutParams(0, dp(44), 1f))
+                    field.addView(text("분", 13f, muted).apply { setPadding(dp(4), 0, dp(6), 0) })
+                    addView(field, LinearLayout.LayoutParams(0, dp(48), 1f).apply { if (index < 2) marginEnd = dp(8) })
                 }
             }
-            gap(card, 10)
+            gap(card, 4)
             card.addView(flat("프리셋 저장", soft, accent) {
                 val values = inputs.map { it.text.toString().toIntOrNull() }
                 val invalid = values.indexOfFirst { it == null || it !in 1..180 }
                 if (invalid >= 0) inputs[invalid].error = "1~180분"
                 else { store.presets = values.filterNotNull(); getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(inputs[0].windowToken, 0); toast("저장했습니다") }
-            }, LinearLayout.LayoutParams(-1, dp(44)))
+            }, LinearLayout.LayoutParams(-1, dp(38)))
         }
-        section("분류") { card ->
-            store.categories().forEach { c -> card.addView(flat(c.name, color = ink) { categoryMenu(c) }.apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(44))) }
-            card.addView(flat("+ 분류 추가", color = accent) { editCategory(null) }, LinearLayout.LayoutParams(-1, dp(44)))
-        }
-        section("알림") { card ->
+        section("알림", { settingsInfo("notifications") }) { card ->
             settingRow(card, "앱 알림", if (TimerEngine.notificationsAllowed(this)) "허용됨" else "차단됨") {
                 openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
             }
             settingRow(card, "정확한 완료 알람", if (TimerEngine.exactAllowed(this)) "허용됨" else "허용 필요") {
                 if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
             }
-            settingRow(card, "잠금화면 알림 안내", "") {
-                AlertDialog.Builder(this).setTitle("잠금화면 알림").setMessage("휴대전화 설정에서 잠금화면 알림의 내용 표시를 허용하세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 강제 중지한 뒤에는 앱을 다시 열어 주세요.").setPositiveButton("확인", null).show()
-            }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.6", 12f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, 0) })
+        page.addView(text("지금 하나 1.7", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun wallpaperSettings() {
-        section("배경화면") { card ->
+        section("배경화면", { settingsInfo("wallpaper") }) { card ->
             row(card).apply {
-                addView(text("배경화면 자동 변경", 15f), LinearLayout.LayoutParams(0, -2, 1f))
+                addView(text("자동 변경", 15f), LinearLayout.LayoutParams(0, -2, 1f))
                 addView(Switch(this@MainActivity).apply {
                     isChecked = store.wallpaperEnabled; contentDescription = "배경화면 자동 변경"
                     thumbTintList = ColorStateList.valueOf(Color.rgb(175, 198, 181))
                     setOnCheckedChangeListener { _, checked -> store.wallpaperEnabled = checked }
-                }, LinearLayout.LayoutParams(dp(56), dp(48)))
+                }, LinearLayout.LayoutParams(dp(56), dp(40)))
             }
-            card.addView(text("집중 선택·시작 시 홈과 잠금화면에 적용합니다", 12f, muted))
-            gap(card, 12)
-            WallpaperPalette.colors.chunked(4).forEach { colors ->
+            WallpaperPalette.colors.chunked(5).forEach { colors ->
                 row(card).apply {
                     colors.forEach { (name, color) ->
                         val chosen = store.wallpaperColor == color
                         val cell = column().apply {
-                            gravity = Gravity.CENTER; setPadding(dp(4), dp(8), dp(4), dp(6))
-                            background = ripple(if (chosen) soft else Color.TRANSPARENT)
+                            gravity = Gravity.CENTER; setPadding(dp(4), dp(6), dp(4), dp(6))
+                            background = ripple(Color.TRANSPARENT)
                             isClickable = true; isFocusable = true; isSelected = chosen
                             contentDescription = "$name 배경색" + if (chosen) ", 선택됨" else ""
-                            addView(View(this@MainActivity).apply { background = shape(color, 6, if (chosen) accent else Color.rgb(211, 218, 213)) }, LinearLayout.LayoutParams(dp(42), dp(26)))
-                            addView(text(name, 12f, if (chosen) accent else muted))
+                            addView(View(this@MainActivity).apply {
+                                background = shape(color, 5, if (chosen) accent else Color.rgb(211, 218, 213)).apply {
+                                    if (chosen) setStroke(dp(2), accent)
+                                }
+                            }, LinearLayout.LayoutParams(-1, dp(30)))
                             setOnClickListener { store.wallpaperColor = color; renderPage() }
                         }
-                        addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+                        addView(cell, LinearLayout.LayoutParams(0, dp(44), 1f))
                     }
                 }
-                gap(card, 4)
             }
-            gap(card, 6)
-            settingRow(card, "홈·잠금화면 배경 미리보기", "") { preview() }
         }
     }
-    private fun settingRow(parent: LinearLayout, title: String, detail: String, action: () -> Unit) {
-        parent.addView(flat(if (detail.isEmpty()) title else "$title  ·  $detail", color = ink, action = action).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(48)))
+    private fun settingsInfo(key: String) {
+        val title = when (key) { "presets" -> "집중 시간 프리셋"; "notifications" -> "알림"; else -> "배경화면" }
+        val message = when (key) {
+            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 1~180분으로 설정한 뒤 저장해 주세요.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다."
+            "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
+            else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 기존 배경화면을 자동으로 복원하지는 않습니다."
+        }
+        AlertDialog.Builder(this).setTitle(title).setMessage(message).apply {
+            if (key == "wallpaper") {
+                setNegativeButton("닫기", null)
+                setPositiveButton("미리보기") { _, _ -> preview() }
+            } else setPositiveButton("확인", null)
+        }.show()
     }
-    private fun section(title: String, content: (LinearLayout) -> Unit) {
-        page.addView(text(title, 14f, muted).apply { setPadding(dp(4), dp(14), 0, dp(8)) })
-        content(card(page).apply { setPadding(dp(12), dp(10), dp(12), dp(10)) })
+    private fun settingRow(parent: LinearLayout, title: String, detail: String, action: () -> Unit) {
+        parent.addView(flat(if (detail.isEmpty()) title else "$title  ·  $detail", color = ink, action = action).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(42)))
+    }
+    private fun section(title: String, help: () -> Unit, content: (LinearLayout) -> Unit) {
+        row(page).apply {
+            addView(text(title, 14f, muted).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), 0, 0, 0) }, LinearLayout.LayoutParams(0, dp(34), 1f))
+            addView(flat("") { help() }.apply {
+                contentDescription = "$title 안내"
+                val icon = getDrawable(R.drawable.ic_info)!!.mutate().apply { setTint(muted); setBounds(0, 0, dp(18), dp(18)) }
+                setPadding(dp(8), 0, dp(8), 0); setCompoundDrawables(icon, null, null, null)
+            }, LinearLayout.LayoutParams(dp(34), dp(34)))
+        }
+        content(card(page).apply { setPadding(dp(10), dp(6), dp(10), dp(6)) })
     }
     @Suppress("DEPRECATION") private fun displaySize() = Point().also { windowManager.defaultDisplay.getRealSize(it) }
     private fun applyWallpaper(title: String, automatic: Boolean = true) {
