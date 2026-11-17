@@ -74,6 +74,7 @@ class TaskDragReorder(
                         }
                         releasePreview()
                         dragged?.alpha = 1f
+                        dragged?.isPressed = false
                         dragged = null
                         scroll.requestDisallowInterceptTouchEvent(false)
                         true
@@ -91,7 +92,17 @@ class TaskDragReorder(
     fun attach(id: String, row: View, title: View) {
         rows.add(id to row)
         val observeTouch = View.OnTouchListener { _, event ->
-            if (dragged == null && event.actionMasked in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE)) pointerY = event.rawY
+            if (dragged == null) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        pointerY = event.rawY
+                        val position = screenPosition(row)
+                        row.drawableHotspotChanged(event.rawX - position[0], event.rawY - position[1])
+                        row.isPressed = true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> row.isPressed = false
+                }
+            }
             false
         }
         row.setOnTouchListener(observeTouch)
@@ -103,6 +114,8 @@ class TaskDragReorder(
             val position = screenPosition(row)
             grabY = (pointerY - position[1]).coerceIn(0f, row.height.toFloat())
             previewLeft = position[0] - screenPosition(overlayHost)[0]
+            row.isPressed = false
+            row.jumpDrawablesToCurrentState()
             val bitmap = Bitmap.createBitmap(row.width, row.height, Bitmap.Config.ARGB_8888)
             Canvas(bitmap).apply { drawColor(Color.WHITE); row.draw(this) }
             preview = object : BitmapDrawable(card.resources, bitmap) {
@@ -115,7 +128,7 @@ class TaskDragReorder(
                     super.draw(canvas)
                     canvas.restoreToCount(saved)
                 }
-            }.apply { alpha = 235 }
+            }.apply { alpha = 140 }
             // Hide Android's freely-moving shadow; the viewport overlay follows Y only.
             val shadow = object : View.DragShadowBuilder(row) {
                 override fun onProvideShadowMetrics(size: Point, touch: Point) { size.set(1, 1); touch.set(0, 0) }

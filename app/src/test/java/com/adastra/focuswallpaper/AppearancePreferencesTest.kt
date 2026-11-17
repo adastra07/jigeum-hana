@@ -4,13 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AppearancePreferencesTest {
-    @Test fun tenFontStepsHaveUnchangedDefaultAndSafeBounds() {
-        assertEquals(10, AppearancePreferences.fontSizes.size)
+    @Test fun nineFontStepsKeepDefaultExactlyInTheMiddle() {
+        assertEquals(9, AppearancePreferences.fontSizes.size)
+        assertEquals(AppearancePreferences.fontSizes.size / 2, AppearancePreferences.DEFAULT_FONT_STEP)
         assertEquals(16, AppearancePreferences.fontSizes[AppearancePreferences.DEFAULT_FONT_STEP])
         assertEquals(1f, AppearancePreferences.fontScale(AppearancePreferences.DEFAULT_FONT_STEP), 0f)
         assertEquals(.75f, AppearancePreferences.fontScale(-100), 0f)
-        assertEquals(21f / 16, AppearancePreferences.fontScale(100), 0f)
-        assertTrue((0..8).all { AppearancePreferences.fontScale(it) < AppearancePreferences.fontScale(it + 1) })
+        assertEquals(20f / 16, AppearancePreferences.fontScale(100), 0f)
+        assertTrue((0..7).all { AppearancePreferences.fontScale(it) < AppearancePreferences.fontScale(it + 1) })
     }
     @Test fun unassignedAlwaysStartsWithoutAnyClock() {
         assertEquals(FocusDefaults.Value(0, false), FocusDefaults.resolve(FocusDefaults.UNASSIGNED, 30, true))

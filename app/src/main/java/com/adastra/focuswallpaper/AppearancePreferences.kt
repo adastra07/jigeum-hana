@@ -2,7 +2,7 @@ package com.adastra.focuswallpaper
 
 object AppearancePreferences {
     const val DEFAULT_FONT_STEP = 4
-    val fontSizes = (12..21).toList()
+    val fontSizes = (12..20).toList()
     fun fontScale(step: Int) = fontSizes[step.coerceIn(fontSizes.indices)].toFloat() / 16f
 }
 

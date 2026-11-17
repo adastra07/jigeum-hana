@@ -151,6 +151,8 @@ class MainActivity : Activity() {
                 isSelected = chosen
             }, LinearLayout.LayoutParams(0, -1, 1f))
         }
+        fitTextControls(page)
+        fitTextControls(navigation)
         renderedSelection = store.selected
         updateFocus()
     }
@@ -188,7 +190,7 @@ class MainActivity : Activity() {
         page.addView(flat("+ 할 일 추가", soft, accent) { editTask(null) }, LinearLayout.LayoutParams(-1, dp(46)))
     }
     private fun taskRow(parent: LinearLayout, task: Task, reorder: TaskDragReorder) {
-        val line = row(parent).apply { minimumHeight = dp(48); if (task.id == store.selected) background = shape(soft, 6) }
+        val line = row(parent).apply { minimumHeight = dp(48); background = ripple(if (task.id == store.selected) soft else Color.TRANSPARENT) }
         val check = CheckBox(this).apply {
             isChecked = task.done; buttonTintList = ColorStateList.valueOf(muted)
             contentDescription = "${task.text} 완료 여부"
@@ -197,7 +199,7 @@ class MainActivity : Activity() {
         line.addView(text(task.text, 16f, if (task.done) muted else ink).apply {
             setPadding(0, dp(5), dp(6), dp(5)); minimumHeight = dp(48); gravity = Gravity.CENTER_VERTICAL
             if (task.done) paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
-            isFocusable = true; background = ripple(Color.TRANSPARENT)
+            isFocusable = true; background = null
             setOnClickListener { editTask(task) }
             reorder.attach(task.id, line, this)
         }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -405,6 +407,7 @@ class MainActivity : Activity() {
             dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             title.requestFocus(); title.setSelection(title.text.length)
         }
+        fitTextControls(body)
         dialog.show()
     }
     private fun editCategory(original: TaskCategory?) {
@@ -451,6 +454,7 @@ class MainActivity : Activity() {
                 else { store.presets = values.filterNotNull(); getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(inputs[0].windowToken, 0); toast("저장했습니다") }
             }, LinearLayout.LayoutParams(-1, dp(38)))
         }
+        wallpaperSettings()
         section("알림", { settingsInfo("notifications") }) { card ->
             settingRow(card, "앱 알림", if (TimerEngine.notificationsAllowed(this)) "허용됨" else "차단됨") {
                 openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
@@ -459,14 +463,13 @@ class MainActivity : Activity() {
                 if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
             }
         }
-        wallpaperSettings()
         page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun defaultFocusSettings() {
         section("기본 집중 시간", { settingsInfo("defaultFocus") }) { card ->
             val buttons = mutableListOf<Pair<String, TextView>>()
             row(card).apply {
-                listOf(FocusDefaults.UNASSIGNED to "미지정", FocusDefaults.STOPWATCH to "스탑워치", FocusDefaults.LAST to "마지막과 같이").forEach { (mode, label) ->
+                listOf(FocusDefaults.UNASSIGNED to "미지정", FocusDefaults.STOPWATCH to "스탑워치", FocusDefaults.LAST to "최근 설정").forEach { (mode, label) ->
                     val button = flat(label) {
                         store.defaultFocusMode = mode
                         buttons.forEach { (id, view) ->
@@ -475,20 +478,20 @@ class MainActivity : Activity() {
                             view.setTextColor(if (id == mode) accent else muted)
                         }
                     }.apply {
-                        textSize = 13f; minimumHeight = dp(44); setPadding(dp(4), dp(6), dp(4), dp(6))
+                        textSize = 13f; minimumHeight = dp(32); setPadding(dp(4), dp(4), dp(4), dp(4))
                         isSelected = store.defaultFocusMode == mode
                         background = ripple(if (isSelected) soft else Color.TRANSPARENT)
                         setTextColor(if (isSelected) accent else muted)
                     }
                     buttons.add(mode to button)
-                    addView(button, LinearLayout.LayoutParams(0, -2, if (mode == FocusDefaults.LAST) 1.35f else 1f))
+                    addView(button, LinearLayout.LayoutParams(0, -2, 1f))
                 }
             }
         }
     }
     private fun fontSettings() {
         section("글자 크기", { settingsInfo("font") }) { card ->
-            val sample = text("지금 할 일 하나", 16f).apply { contentDescription = "글자 크기 미리보기" }
+            val sample = text("ABC abc 123 가나다", 16f).apply { contentDescription = "글자 크기 미리보기" }
             row(card).apply {
                 addView(sample, LinearLayout.LayoutParams(0, -2, 1f))
                 addView(flat("초기화", color = muted) {
@@ -502,7 +505,7 @@ class MainActivity : Activity() {
                 max = AppearancePreferences.fontSizes.lastIndex; progress = store.fontStep
                 progressTintList = ColorStateList.valueOf(Color.rgb(175, 198, 181))
                 thumbTintList = ColorStateList.valueOf(Color.rgb(132, 164, 145))
-                contentDescription = "글자 크기, 10단계"
+                contentDescription = "글자 크기, 9단계"
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     private var tracking = false
                     override fun onStartTrackingTouch(seekBar: SeekBar?) { tracking = true }
@@ -522,7 +525,7 @@ class MainActivity : Activity() {
             }
             card.addView(seek, LinearLayout.LayoutParams(-1, dp(40)))
             row(card).apply {
-                listOf("12", "16", "21").forEachIndexed { index, label ->
+                listOf("12", "16", "20").forEachIndexed { index, label ->
                     addView(text(label, 10f, muted).apply {
                         gravity = when (index) { 0 -> Gravity.START; 1 -> Gravity.CENTER; else -> Gravity.END }
                         setPadding(dp(16), 0, dp(16), 0)
@@ -569,8 +572,8 @@ class MainActivity : Activity() {
     private fun settingsInfo(key: String) {
         val title = when (key) { "presets" -> "집중 시간 프리셋"; "defaultFocus" -> "기본 집중 시간"; "font" -> "글자 크기"; "notifications" -> "알림"; else -> "배경화면" }
         val message = when (key) {
-            "defaultFocus" -> "새 할 일에 처음 적용할 집중 방식입니다. 미지정은 타이머 없이, 스탑워치는 경과 시간 측정으로 시작합니다. 마지막과 같이는 마지막으로 저장·선택·시작한 시간과 방식을 사용합니다. 기존 항목은 바뀌지 않습니다."
-            "font" -> "글자 크기는 10단계로 조절합니다. 아래 숫자는 본문 기준 크기이며 제목과 버튼 글자도 비례하여 바뀝니다. 휴대전화의 글자 크기 설정도 함께 적용됩니다. 초기화하면 기본 크기인 16으로 돌아갑니다."
+            "defaultFocus" -> "새 할 일에 처음 적용할 집중 방식입니다. 미지정은 타이머 없이, 스탑워치는 경과 시간 측정으로 시작합니다. 최근 설정은 마지막으로 저장·선택·시작한 시간과 방식을 사용합니다. 기존 항목은 바뀌지 않습니다."
+            "font" -> "글자 크기는 9단계로 조절합니다. 가운데 단계가 기본 크기입니다. 아래 숫자는 본문 기준 크기이며 제목과 버튼 글자도 비례하여 바뀝니다. 휴대전화의 글자 크기 설정도 함께 적용됩니다. 초기화하면 기본 크기인 16으로 돌아갑니다."
             "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일의 기본 방식은 기본 집중 시간에서 선택할 수 있습니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
             "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
             else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 집중 해제 시에는 할 일 문구를 지우고 적용했던 배경색만 남깁니다. 기존 배경 사진을 복원하지는 않습니다."
@@ -625,6 +628,28 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen); super.onSaveInstanceState(outState) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); TimerEngine.sync(this)
+    }
+    // Keep ordinary controls compact, but let text and its containers grow with font size.
+    private fun fitTextControls(view: View): Boolean {
+        var hasText = view is TextView
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                if (fitTextControls(view.getChildAt(index))) hasText = true
+            }
+        }
+        val params = view.layoutParams
+        if (hasText && params != null) {
+            if (params.height > 0) {
+                view.minimumHeight = maxOf(view.minimumHeight, params.height)
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                view.layoutParams = params
+            } else if (view is TextView && view.parent === navigation && params.height == ViewGroup.LayoutParams.MATCH_PARENT) {
+                view.minimumHeight = dp(80)
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                view.layoutParams = params
+            }
+        }
+        return hasText
     }
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
