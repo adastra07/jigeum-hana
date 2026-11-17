@@ -524,14 +524,26 @@ class MainActivity : Activity() {
                 })
             }
             card.addView(seek, LinearLayout.LayoutParams(-1, dp(40)))
-            row(card).apply {
-                listOf("12", "16", "20").forEachIndexed { index, label ->
-                    addView(text(label, 10f, muted).apply {
-                        gravity = when (index) { 0 -> Gravity.START; 1 -> Gravity.CENTER; else -> Gravity.END }
-                        setPadding(dp(16), 0, dp(16), 0)
-                    }, LinearLayout.LayoutParams(0, -2, 1f))
+            val markers = FrameLayout(this)
+            val labels = listOf("12", "16", "20").map { label ->
+                text(label, 10f, muted).apply {
+                    gravity = Gravity.CENTER; setPadding(0, 0, 0, 0)
+                    markers.addView(this, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.LEFT))
                 }
             }
+            card.addView(markers, LinearLayout.LayoutParams(-1, -2))
+            fun alignToTrack() {
+                if (sample.paddingLeft != seek.paddingLeft) {
+                    sample.setPadding(seek.paddingLeft, sample.paddingTop, sample.paddingRight, sample.paddingBottom)
+                }
+                val start = (seek.left + seek.paddingLeft - markers.left).toFloat()
+                val end = (seek.right - seek.paddingRight - markers.left).toFloat()
+                labels.forEachIndexed { index, label ->
+                    label.x = start + (end - start) * index / 2f - label.width / 2f
+                }
+            }
+            seek.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignToTrack() }
+            markers.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignToTrack() }
         }
     }
     private fun View.stateDescriptionCompat(value: String) {
