@@ -24,6 +24,6 @@ jobs:
           cd "$RUNNER_TEMP/share-apk"
           printf '%s\n' 'c2f1172defb140f9dd96b8ca82f722e0b248e8f92a4fffcd07c01b4681f3df80  app-debug.apk' | sha256sum --check
           mv app-debug.apk jigeum-hana-v1.13.apk
-          gh release create v1.13 jigeum-hana-v1.13.apk --draft --target c4b115e2690720d24726c5ff10679acf1d311b13 --title '지금 하나 v1.13' --notes 'Android용 APK입니다. 아래 jigeum-hana-v1.13.apk를 다운로드하여 설치할 수 있습니다. 체크리스트 항목을 길게 누른 뒤 끌어 순서를 바꿀 수 있습니다. 순서는 분류별로 저장됩니다.'
+          gh release create v1.13 jigeum-hana-v1.13.apk --draft --target "${{ github.sha }}" --title '지금 하나 v1.13' --notes 'Android용 APK입니다. 아래 jigeum-hana-v1.13.apk를 다운로드하여 설치할 수 있습니다. 체크리스트 항목을 길게 누른 뒤 끌어 순서를 바꿀 수 있습니다. 순서는 분류별로 저장됩니다.'
           gh release edit v1.13 --draft=false
           gh release view v1.13 --json url --jq .url
