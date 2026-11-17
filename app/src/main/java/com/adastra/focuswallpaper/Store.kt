@@ -59,6 +59,12 @@ class Store(context: Context) {
     fun saveTimerAndTasks(value: TimerState, tasks: List<Task>) {
         timerEditor(value).putString("tasks", TaskCodec.encode(tasks)).commit()
     }
+    var defaultFocusMode: String
+        get() = prefs.getString("defaultFocusMode", FocusDefaults.LAST)?.takeIf { it in FocusDefaults.modes } ?: FocusDefaults.LAST
+        set(value) { require(value in FocusDefaults.modes); prefs.edit().putString("defaultFocusMode", value).commit() }
+    var fontStep: Int
+        get() = prefs.getInt("fontStep", AppearancePreferences.DEFAULT_FONT_STEP).coerceIn(AppearancePreferences.fontSizes.indices)
+        set(value) { require(value in AppearancePreferences.fontSizes.indices); prefs.edit().putInt("fontStep", value).commit() }
     var lastStopwatch: Boolean
         get() = prefs.getBoolean("lastStopwatch", false)
         set(value) { prefs.edit().putBoolean("lastStopwatch", value).commit() }

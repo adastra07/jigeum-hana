@@ -52,6 +52,11 @@ class MainActivity : Activity() {
             handler.postDelayed(this, 500)
         }
     }
+    override fun attachBaseContext(base: android.content.Context) {
+        val config = android.content.res.Configuration(base.resources.configuration)
+        config.fontScale *= AppearancePreferences.fontScale(Store(base).fontStep)
+        super.attachBaseContext(base.createConfigurationContext(config))
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = canvas; window.navigationBarColor = Color.WHITE
@@ -291,7 +296,8 @@ class MainActivity : Activity() {
         else apply()
     }
     private fun editTask(original: Task?) {
-        val draft = original?.copy() ?: Task(text = "", minutes = store.lastMinutes, categoryId = store.category, stopwatch = store.lastStopwatch)
+        val defaults = FocusDefaults.resolve(store.defaultFocusMode, store.lastMinutes, store.lastStopwatch)
+        val draft = original?.copy() ?: Task(text = "", minutes = defaults.minutes, categoryId = store.category, stopwatch = defaults.stopwatch)
         val body = column().apply { setPadding(dp(20), dp(4), dp(20), dp(6)) }
         val title = EditText(this).apply {
             setText(draft.text); hint = "어떤 일에 집중할까요?"; textSize = 18f
@@ -324,11 +330,33 @@ class MainActivity : Activity() {
         gap(body, 12)
         body.addView(text("분류", 13f, muted))
         val categories = store.categories()
-        val category = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, categories.map { it.name })
-            setSelection(categories.indexOfFirst { it.id == draft.categoryId }.coerceAtLeast(0)); contentDescription = "할 일 분류"
+        var categoryId = categories.firstOrNull { it.id == draft.categoryId }?.id ?: DEFAULT_CATEGORY
+        val categoryStrip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val categoryScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; addView(categoryStrip); contentDescription = "할 일 분류"
         }
-        body.addView(category, LinearLayout.LayoutParams(-1, dp(48)))
+        val categoryLabels = mutableListOf<Pair<TaskCategory, TextView>>()
+        fun updateCategory() {
+            categoryLabels.forEach { (item, label) ->
+                val chosen = item.id == categoryId
+                label.isSelected = chosen
+                label.setTextColor(if (chosen) accent else muted)
+                label.setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
+                label.contentDescription = item.name + if (chosen) ", 선택됨" else ""
+            }
+        }
+        categories.forEachIndexed { index, item ->
+            if (index > 0) categoryStrip.addView(text("/", 14f, muted).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO })
+            val label = flat(item.name, color = muted) { categoryId = item.id; updateCategory() }.apply {
+                background = ripple(Color.TRANSPARENT); isSingleLine = true
+                setPadding(dp(10), dp(8), dp(10), dp(8)); minimumHeight = dp(44)
+            }
+            categoryLabels.add(item to label)
+            categoryStrip.addView(label, LinearLayout.LayoutParams(-2, -2))
+        }
+        updateCategory()
+        body.addView(categoryScroll, LinearLayout.LayoutParams(-1, -2))
+        categoryScroll.post { categoryLabels.firstOrNull { it.first.id == categoryId }?.second?.let { categoryScroll.scrollTo((it.left - dp(8)).coerceAtLeast(0), 0) } }
         gap(body, 12)
         val choices = row(body)
         val alreadySelected = store.selected == draft.id
@@ -363,7 +391,7 @@ class MainActivity : Activity() {
             if (value.isEmpty()) { title.error = "할 일을 입력해 주세요"; return null }
             if (!stopwatchMode && (duration == null || duration !in 0..180)) { minutes.error = "0~180분"; return null }
             return draft.copy(text = value, minutes = (duration ?: draft.minutes).coerceIn(0, 180),
-                categoryId = categories[category.selectedItemPosition].id, stopwatch = stopwatchMode)
+                categoryId = categoryId, stopwatch = stopwatchMode)
         }
         fun close() { getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(title.windowToken, 0); dialog.dismiss() }
         dialog.setOnShowListener {
@@ -403,6 +431,8 @@ class MainActivity : Activity() {
         }.show()
     }
     private fun renderSettings() {
+        defaultFocusSettings()
+        fontSettings()
         section("집중 시간 프리셋", { settingsInfo("presets") }) { card ->
             val inputs = store.presets.map { numberInput(it) }
             row(card).apply {
@@ -430,7 +460,79 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        page.addView(text("지금 하나 1.12", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+        page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+    }
+    private fun defaultFocusSettings() {
+        section("기본 집중 시간", { settingsInfo("defaultFocus") }) { card ->
+            val buttons = mutableListOf<Pair<String, TextView>>()
+            row(card).apply {
+                listOf(FocusDefaults.UNASSIGNED to "미지정", FocusDefaults.STOPWATCH to "스탑워치", FocusDefaults.LAST to "마지막과 같이").forEach { (mode, label) ->
+                    val button = flat(label) {
+                        store.defaultFocusMode = mode
+                        buttons.forEach { (id, view) ->
+                            view.isSelected = id == mode
+                            view.background = ripple(if (id == mode) soft else Color.TRANSPARENT)
+                            view.setTextColor(if (id == mode) accent else muted)
+                        }
+                    }.apply {
+                        textSize = 13f; minimumHeight = dp(44); setPadding(dp(4), dp(6), dp(4), dp(6))
+                        isSelected = store.defaultFocusMode == mode
+                        background = ripple(if (isSelected) soft else Color.TRANSPARENT)
+                        setTextColor(if (isSelected) accent else muted)
+                    }
+                    buttons.add(mode to button)
+                    addView(button, LinearLayout.LayoutParams(0, -2, if (mode == FocusDefaults.LAST) 1.35f else 1f))
+                }
+            }
+        }
+    }
+    private fun fontSettings() {
+        section("글자 크기", { settingsInfo("font") }) { card ->
+            val sample = text("지금 할 일 하나", 16f).apply { contentDescription = "글자 크기 미리보기" }
+            row(card).apply {
+                addView(sample, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(flat("초기화", color = muted) {
+                    if (store.fontStep != AppearancePreferences.DEFAULT_FONT_STEP) {
+                        store.fontStep = AppearancePreferences.DEFAULT_FONT_STEP; recreate()
+                    }
+                }.apply { textSize = 12f }, LinearLayout.LayoutParams(-2, dp(40)))
+            }
+            val appliedScale = AppearancePreferences.fontScale(store.fontStep)
+            val seek = SeekBar(this).apply {
+                max = AppearancePreferences.fontSizes.lastIndex; progress = store.fontStep
+                progressTintList = ColorStateList.valueOf(Color.rgb(175, 198, 181))
+                thumbTintList = ColorStateList.valueOf(Color.rgb(132, 164, 145))
+                contentDescription = "글자 크기, 10단계"
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    private var tracking = false
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) { tracking = true }
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        sample.textSize = 16f * AppearancePreferences.fontScale(progress) / appliedScale
+                        seekBar?.stateDescriptionCompat("${progress + 1}단계")
+                        if (fromUser && !tracking && store.fontStep != progress) {
+                            store.fontStep = progress; recreate()
+                        }
+                    }
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                        tracking = false
+                        val step = seekBar?.progress ?: return
+                        if (store.fontStep != step) { store.fontStep = step; recreate() }
+                    }
+                })
+            }
+            card.addView(seek, LinearLayout.LayoutParams(-1, dp(40)))
+            row(card).apply {
+                listOf("12", "16", "21").forEachIndexed { index, label ->
+                    addView(text(label, 10f, muted).apply {
+                        gravity = when (index) { 0 -> Gravity.START; 1 -> Gravity.CENTER; else -> Gravity.END }
+                        setPadding(dp(16), 0, dp(16), 0)
+                    }, LinearLayout.LayoutParams(0, -2, 1f))
+                }
+            }
+        }
+    }
+    private fun View.stateDescriptionCompat(value: String) {
+        if (Build.VERSION.SDK_INT >= 30) stateDescription = value
     }
     private fun wallpaperSettings() {
         section("배경화면", { settingsInfo("wallpaper") }) { card ->
@@ -465,9 +567,11 @@ class MainActivity : Activity() {
         }
     }
     private fun settingsInfo(key: String) {
-        val title = when (key) { "presets" -> "집중 시간 프리셋"; "notifications" -> "알림"; else -> "배경화면" }
+        val title = when (key) { "presets" -> "집중 시간 프리셋"; "defaultFocus" -> "기본 집중 시간"; "font" -> "글자 크기"; "notifications" -> "알림"; else -> "배경화면" }
         val message = when (key) {
-            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일은 마지막으로 저장·선택·시작한 시간을 기본값으로 사용합니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
+            "defaultFocus" -> "새 할 일에 처음 적용할 집중 방식입니다. 미지정은 타이머 없이, 스탑워치는 경과 시간 측정으로 시작합니다. 마지막과 같이는 마지막으로 저장·선택·시작한 시간과 방식을 사용합니다. 기존 항목은 바뀌지 않습니다."
+            "font" -> "글자 크기는 10단계로 조절합니다. 아래 숫자는 본문 기준 크기이며 제목과 버튼 글자도 비례하여 바뀝니다. 휴대전화의 글자 크기 설정도 함께 적용됩니다. 초기화하면 기본 크기인 16으로 돌아갑니다."
+            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일의 기본 방식은 기본 집중 시간에서 선택할 수 있습니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
             "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
             else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 집중 해제 시에는 할 일 문구를 지우고 적용했던 배경색만 남깁니다. 기존 배경 사진을 복원하지는 않습니다."
         }
