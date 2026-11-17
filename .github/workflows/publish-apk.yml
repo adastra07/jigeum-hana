@@ -1,0 +1,29 @@
+name: Publish shareable APK
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Publish the tested v1.12 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/share-apk"
+          gh run download 43979296563 --name jigeum-hana-debug-15 --dir "$RUNNER_TEMP/share-apk"
+          cd "$RUNNER_TEMP/share-apk"
+          printf '%s\n' '942a948acbc0b7a794e931113311be654a02970be3e06577f2fa1ae815fc9add  app-debug.apk' | sha256sum --check
+          mv app-debug.apk jigeum-hana-v1.12.apk
+          gh release create v1.12 jigeum-hana-v1.12.apk --draft --target c9f0f4f5a6a9655cc55194839186ae4d217321df --title '지금 하나 v1.12' --notes 'Android용 APK입니다. 아래 jigeum-hana-v1.12.apk를 다운로드하여 설치할 수 있습니다. 체크리스트, 집중 타이머, 항목별 스탑워치를 포함한 테스트 배포 버전입니다.'
+          gh release edit v1.12 --draft=false
+          gh release view v1.12 --json url --jq .url
