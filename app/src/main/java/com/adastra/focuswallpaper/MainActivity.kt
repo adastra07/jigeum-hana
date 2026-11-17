@@ -33,6 +33,7 @@ class MainActivity : Activity() {
     private val canvas = Color.rgb(247, 248, 247)
     private lateinit var store: Store
     private lateinit var page: LinearLayout
+    private lateinit var pageScroll: ScrollView
     private lateinit var heading: TextView
     private lateinit var timerPanel: LinearLayout
     private lateinit var focus: TextView
@@ -88,7 +89,8 @@ class MainActivity : Activity() {
         timerPanel.addView(pause, LinearLayout.LayoutParams(dp(44), dp(44)))
         timerPanel.addView(flat("×") { clearFocus() }.apply { textSize = 24f; contentDescription = "집중 해제" }, LinearLayout.LayoutParams(dp(44), dp(44)))
         page = column().apply { setPadding(dp(16), 0, dp(16), dp(16)) }
-        root.addView(ScrollView(this).apply { isFillViewport = true; addView(page) }, LinearLayout.LayoutParams(-1, 0, 1f))
+        pageScroll = ScrollView(this).apply { isFillViewport = true; addView(page) }
+        root.addView(pageScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(View(this).apply { setBackgroundColor(Color.rgb(229, 232, 229)) }, LinearLayout.LayoutParams(-1, dp(1)))
         navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE) }
         root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
@@ -172,11 +174,15 @@ class MainActivity : Activity() {
         val card = card(page)
         val tasks = store.tasks().filter { it.deletedAt == 0L && it.categoryId == store.category }
         if (tasks.isEmpty()) card.addView(text("할 일을 추가해 주세요", 14f, muted).apply { setPadding(dp(10), dp(14), dp(10), dp(14)) })
-        tasks.forEach { task -> taskRow(card, task) }
+        val categoryId = store.category
+        val reorder = TaskDragReorder(card, pageScroll) { ids ->
+            store.saveTasks(TaskOrder.reorder(store.tasks(), categoryId, ids))
+        }
+        tasks.forEach { task -> taskRow(card, task, reorder) }
         gap(page, 12)
         page.addView(flat("+ 할 일 추가", soft, accent) { editTask(null) }, LinearLayout.LayoutParams(-1, dp(46)))
     }
-    private fun taskRow(parent: LinearLayout, task: Task) {
+    private fun taskRow(parent: LinearLayout, task: Task, reorder: TaskDragReorder) {
         val line = row(parent).apply { minimumHeight = dp(48); if (task.id == store.selected) background = shape(soft, 6) }
         val check = CheckBox(this).apply {
             isChecked = task.done; buttonTintList = ColorStateList.valueOf(muted)
@@ -188,6 +194,7 @@ class MainActivity : Activity() {
             if (task.done) paintFlags = paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
             isFocusable = true; background = ripple(Color.TRANSPARENT)
             setOnClickListener { editTask(task) }
+            reorder.attach(task.id, line, this)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         if (task.hasClock) line.addView(flat(if (task.stopwatch) "" else task.minutes.toString(), color = muted) {
             store.tasks().firstOrNull { it.id == task.id && it.deletedAt == 0L }?.let { selectTask(it, true) }

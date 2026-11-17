@@ -111,3 +111,5 @@ Android Studio에서 열거나 `ANDROID_HOME`/`local.properties`에 SDK 경로�
 잠금 해제 시 별도 화면을 띄우는 기능은 포함하지 않습니다.
 
 정적 분석 결과와 실기기 점검표: [docs/APK_ANALYSIS.md](docs/APK_ANALYSIS.md).
+
+체크리스트 항목의 이름을 길게 누른 뒤 위아래로 끌어 순서를 바꿀 수 있습니다. 순서는 분류별로 저장하며, 목록 밖에 놓아 취소하면 이전 순서를 유지합니다.
