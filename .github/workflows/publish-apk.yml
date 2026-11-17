@@ -15,15 +15,15 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Publish the tested v1.12 APK
+      - name: Publish the tested v1.13 APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/share-apk"
-          gh run download 43979296563 --name jigeum-hana-debug-15 --dir "$RUNNER_TEMP/share-apk"
+          gh run download 44133475420 --name jigeum-hana-debug-17 --dir "$RUNNER_TEMP/share-apk"
           cd "$RUNNER_TEMP/share-apk"
-          printf '%s\n' '942a948acbc0b7a794e931113311be654a02970be3e06577f2fa1ae815fc9add  app-debug.apk' | sha256sum --check
-          mv app-debug.apk jigeum-hana-v1.12.apk
-          gh release create v1.12 jigeum-hana-v1.12.apk --draft --target c9f0f4f5a6a9655cc55194839186ae4d217321df --title '지금 하나 v1.12' --notes 'Android용 APK입니다. 아래 jigeum-hana-v1.12.apk를 다운로드하여 설치할 수 있습니다. 체크리스트, 집중 타이머, 항목별 스탑워치를 포함한 테스트 배포 버전입니다.'
-          gh release edit v1.12 --draft=false
-          gh release view v1.12 --json url --jq .url
+          printf '%s\n' 'c2f1172defb140f9dd96b8ca82f722e0b248e8f92a4fffcd07c01b4681f3df80  app-debug.apk' | sha256sum --check
+          mv app-debug.apk jigeum-hana-v1.13.apk
+          gh release create v1.13 jigeum-hana-v1.13.apk --draft --target c4b115e2690720d24726c5ff10679acf1d311b13 --title '지금 하나 v1.13' --notes 'Android용 APK입니다. 아래 jigeum-hana-v1.13.apk를 다운로드하여 설치할 수 있습니다. 체크리스트 항목을 길게 누른 뒤 끌어 순서를 바꿀 수 있습니다. 순서는 분류별로 저장됩니다.'
+          gh release edit v1.13 --draft=false
+          gh release view v1.13 --json url --jq .url
