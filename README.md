@@ -1,6 +1,9 @@
 # 지금 하나 · Jigeum Hana
 
 체크리스트에서 지금 할 일 하나를 선택하고 집중하는 가벼운 Kotlin Android 앱.
+
+사용자 요청과 버전별 변경 이력 전체: [요청 사항 및 업데이트 내역](docs/REQUESTS_AND_CHANGELOG.md).
+
 기존 1.2 APK를 정적 분석하여 Kotlin 소스로 재구성한 첫 클라우드 버전입니다.
 
 ## 1.12 항목별 스탑워치
