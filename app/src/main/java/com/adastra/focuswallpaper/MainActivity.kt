@@ -583,7 +583,7 @@ class MainActivity : Activity() {
         }.show()
     }
     private fun settingRow(parent: LinearLayout, title: String, detail: String, action: () -> Unit) {
-        parent.addView(flat(if (detail.isEmpty()) title else "$title  ·  $detail", color = ink, action = action).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START }, LinearLayout.LayoutParams(-1, dp(42)))
+        parent.addView(flat(if (detail.isEmpty()) title else "$title  ·  $detail", color = ink, action = action).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.START; minimumHeight = dp(42) }, LinearLayout.LayoutParams(-1, -2))
     }
     private fun section(title: String, help: () -> Unit, content: (LinearLayout) -> Unit) {
         if (page.childCount > 0) gap(page, 8)
@@ -648,7 +648,8 @@ class MainActivity : Activity() {
         inputType = InputType.TYPE_CLASS_NUMBER; setText(value.toString()); textSize = 16f
         filters = arrayOf(InputFilter.LengthFilter(3)); backgroundTintList = ColorStateList.valueOf(accent); contentDescription = "집중 시간 (분)"
     }
-    private fun action(parent: LinearLayout, view: View) { parent.addView(view, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(6) }) }
+    private fun action(parent: LinearLayout, view: View) { view.minimumHeight = dp(44); parent.addView(view, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(6) }) }
     private fun gap(parent: LinearLayout, height: Int) { parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height))) }
     private fun toast(message: String) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
 }
+
