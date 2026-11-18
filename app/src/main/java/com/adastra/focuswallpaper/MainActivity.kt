@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var pause: TextView
     private lateinit var navigation: LinearLayout
     private var screen = "tasks"
+    private var orderCategoryId = ""
     private var renderedSelection: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private var wallpaperBusy = false
@@ -63,6 +64,7 @@ class MainActivity : Activity() {
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         store = Store(this)
         screen = savedInstanceState?.getString("screen") ?: "tasks"
+        orderCategoryId = savedInstanceState?.getString("orderCategoryId") ?: store.category
         if (store.categories().none { it.id == store.category }) store.category = DEFAULT_CATEGORY
         if (active() && store.timer.taskId.isEmpty()) {
             val id = store.tasks().firstOrNull { it.deletedAt == 0L && it.text == store.timer.title }?.id ?: store.selected
@@ -434,6 +436,7 @@ class MainActivity : Activity() {
         }.show()
     }
     private fun renderSettings() {
+        categoryOrderSettings()
         defaultFocusSettings()
         fontSettings()
         section("집중 시간 프리셋", { settingsInfo("presets") }) { card ->
@@ -477,6 +480,66 @@ class MainActivity : Activity() {
             }
         }
         page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+    }
+    private fun categoryOrderSettings() {
+        section("목록 순서", { settingsInfo("categoryOrder") }) { card ->
+            val strip = row(card)
+            val leftArrow = flat("‹", color = muted) {}.apply { textSize = 25f; setPadding(0, 0, 0, 0) }
+            val leftName = flat("", color = muted) {}
+            val currentName = flat("", soft, accent) {}.apply { setTypeface(null, Typeface.BOLD) }
+            val rightName = flat("", color = muted) {}
+            val rightArrow = flat("›", color = muted) {}.apply { textSize = 25f; setPadding(0, 0, 0, 0) }
+            listOf(leftName, currentName, rightName).forEach {
+                it.textSize = 13f; it.maxLines = 2; it.ellipsize = TextUtils.TruncateAt.END
+                it.setPadding(dp(4), dp(5), dp(4), dp(5)); it.minimumHeight = dp(44)
+            }
+            strip.addView(leftArrow, LinearLayout.LayoutParams(dp(40), dp(44)))
+            strip.addView(leftName, LinearLayout.LayoutParams(0, -2, 1f))
+            strip.addView(currentName, LinearLayout.LayoutParams(0, -2, 1.2f))
+            strip.addView(rightName, LinearLayout.LayoutParams(0, -2, 1f))
+            strip.addView(rightArrow, LinearLayout.LayoutParams(dp(40), dp(44)))
+            fun refresh() {
+                val categories = store.categories()
+                if (categories.none { it.id == orderCategoryId }) orderCategoryId = categories.first().id
+                val index = categories.indexOfFirst { it.id == orderCategoryId }
+                val left = categories.getOrNull(index - 1)
+                val right = categories.getOrNull(index + 1)
+                currentName.text = categories[index].name
+                currentName.contentDescription = "순서를 바꿀 목록 선택, ${categories[index].name}"
+                leftName.text = left?.name.orEmpty(); rightName.text = right?.name.orEmpty()
+                leftName.contentDescription = left?.let { "${it.name} 목록 선택" }
+                rightName.contentDescription = right?.let { "${it.name} 목록 선택" }
+                leftArrow.visibility = if (left == null) View.INVISIBLE else View.VISIBLE
+                leftName.visibility = leftArrow.visibility
+                rightArrow.visibility = if (right == null) View.INVISIBLE else View.VISIBLE
+                rightName.visibility = rightArrow.visibility
+                leftArrow.contentDescription = "${categories[index].name} 목록을 한 칸 왼쪽으로 이동"
+                rightArrow.contentDescription = "${categories[index].name} 목록을 한 칸 오른쪽으로 이동"
+            }
+            fun move(direction: Int) {
+                val categories = store.categories()
+                val updated = CategoryOrder.move(categories, orderCategoryId, direction)
+                if (updated != categories) store.saveCategories(updated)
+                refresh()
+            }
+            fun selectNeighbour(direction: Int) {
+                val categories = store.categories()
+                val index = categories.indexOfFirst { it.id == orderCategoryId }
+                categories.getOrNull(index + direction)?.let { orderCategoryId = it.id; refresh() }
+            }
+            leftArrow.setOnClickListener { move(-1) }
+            rightArrow.setOnClickListener { move(1) }
+            leftName.setOnClickListener { selectNeighbour(-1) }
+            rightName.setOnClickListener { selectNeighbour(1) }
+            currentName.setOnClickListener {
+                val categories = store.categories()
+                AlertDialog.Builder(this).setTitle("순서를 바꿀 목록")
+                    .setItems(categories.map { it.name }.toTypedArray()) { _, index ->
+                        orderCategoryId = categories[index].id; refresh()
+                    }.setNegativeButton("닫기", null).show()
+            }
+            refresh()
+        }
     }
     private fun defaultFocusSettings() {
         section("기본 집중 시간", { settingsInfo("defaultFocus") }) { card ->
@@ -595,8 +658,9 @@ class MainActivity : Activity() {
         }
     }
     private fun settingsInfo(key: String) {
-        val title = when (key) { "presets" -> "집중 시간 프리셋"; "defaultFocus" -> "기본 집중 시간"; "font" -> "글자 크기"; "notifications" -> "알림"; else -> "배경화면" }
+        val title = when (key) { "categoryOrder" -> "목록 순서"; "presets" -> "집중 시간 프리셋"; "defaultFocus" -> "기본 집중 시간"; "font" -> "글자 크기"; "notifications" -> "알림"; else -> "배경화면" }
         val message = when (key) {
+            "categoryOrder" -> "가운데 이름을 눌러 순서를 바꿀 목록을 선택하세요. 양쪽 화살표를 누르면 선택한 목록이 한 칸씩 이동하고 바로 저장됩니다. 이웃 이름을 누르면 그 목록을 선택합니다. 맨 앞·뒤에는 없는 쪽 이름과 화살표를 숨깁니다. 목록 안의 할 일 순서는 바뀌지 않습니다."
             "defaultFocus" -> "새 할 일에 처음 적용할 집중 방식입니다. 미지정은 타이머 없이, 스탑워치는 경과 시간 측정으로 시작합니다. 최근 설정은 마지막으로 저장·선택·시작한 시간과 방식을 사용합니다. 기존 항목은 바뀌지 않습니다."
             "font" -> "글자 크기는 9단계로 조절합니다. 가운데 단계가 기본 크기입니다. 아래 숫자는 본문 기준 크기이며 제목과 버튼 글자도 비례하여 바뀝니다. 휴대전화의 글자 크기 설정도 함께 적용됩니다. 초기화하면 기본 크기인 16으로 돌아갑니다."
             "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 입력하면 자동으로 저장됩니다. 비어 있거나 범위를 벗어난 입력은 기존 값을 유지합니다. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일의 기본 방식은 기본 집중 시간에서 선택할 수 있습니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
@@ -650,7 +714,7 @@ class MainActivity : Activity() {
     private fun openSettings(intent: Intent) { try { startActivity(intent) } catch (_: ActivityNotFoundException) { toast("휴대전화의 앱 설정에서 변경해 주세요.") } }
     override fun onResume() { super.onResume(); TimerEngine.sync(this); renderPage(); handler.removeCallbacks(tick); handler.post(tick) }
     override fun onPause() { handler.removeCallbacks(tick); super.onPause() }
-    override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen); super.onSaveInstanceState(outState) }
+    override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen); outState.putString("orderCategoryId", orderCategoryId); super.onSaveInstanceState(outState) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); TimerEngine.sync(this)
     }
