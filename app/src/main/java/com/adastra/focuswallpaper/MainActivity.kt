@@ -446,13 +446,26 @@ class MainActivity : Activity() {
                     addView(field, LinearLayout.LayoutParams(0, dp(48), 1f).apply { if (index < 2) marginEnd = dp(8) })
                 }
             }
-            gap(card, 4)
-            card.addView(flat("프리셋 저장", soft, accent) {
-                val values = inputs.map { it.text.toString().toIntOrNull() }
-                val invalid = values.indexOfFirst { it == null || it !in 0..180 }
-                if (invalid >= 0) inputs[invalid].error = "0~180분"
-                else { store.presets = values.filterNotNull(); getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(inputs[0].windowToken, 0); toast("저장했습니다") }
-            }, LinearLayout.LayoutParams(-1, dp(38)))
+            inputs.forEachIndexed { index, input ->
+                input.addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        val value = s?.toString()?.toIntOrNull()
+                        if (value == null || value !in 0..180) {
+                            input.error = if (s.isNullOrEmpty()) null else "0~180분"
+                            return
+                        }
+                        input.error = null
+                        // Read current saved values so an unfinished field cannot block another one.
+                        val presets = store.presets.toMutableList()
+                        if (presets[index] != value) {
+                            presets[index] = value
+                            store.presets = presets
+                        }
+                    }
+                })
+            }
         }
         wallpaperSettings()
         section("알림", { settingsInfo("notifications") }) { card ->
@@ -586,7 +599,7 @@ class MainActivity : Activity() {
         val message = when (key) {
             "defaultFocus" -> "새 할 일에 처음 적용할 집중 방식입니다. 미지정은 타이머 없이, 스탑워치는 경과 시간 측정으로 시작합니다. 최근 설정은 마지막으로 저장·선택·시작한 시간과 방식을 사용합니다. 기존 항목은 바뀌지 않습니다."
             "font" -> "글자 크기는 9단계로 조절합니다. 가운데 단계가 기본 크기입니다. 아래 숫자는 본문 기준 크기이며 제목과 버튼 글자도 비례하여 바뀝니다. 휴대전화의 글자 크기 설정도 함께 적용됩니다. 초기화하면 기본 크기인 16으로 돌아갑니다."
-            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 설정한 뒤 저장해 주세요. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일의 기본 방식은 기본 집중 시간에서 선택할 수 있습니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
+            "presets" -> "할 일 편집창에서 빠르게 선택할 세 가지 시간입니다. 각각 0~180분으로 입력하면 자동으로 저장됩니다. 비어 있거나 범위를 벗어난 입력은 기존 값을 유지합니다. 0분은 타이머를 사용하지 않습니다.\n\n새 할 일의 기본 방식은 기본 집중 시간에서 선택할 수 있습니다. 기존 항목의 시간은 바뀌지 않습니다. 미지정은 타이머 없이 사용하며, 스탑워치는 항목별로 시간을 저장합니다."
             "notifications" -> "앱 알림을 허용하면 진행 시간과 완료 알림을 확인할 수 있습니다. 잠금화면에서도 보려면 휴대전화 설정의 알림 내용 표시를 허용해 주세요.\n\n정확한 완료 알람을 허용하지 않으면 절전 중 알림이 늦을 수 있습니다. 앱을 강제 중지한 뒤에는 다시 열어 주세요."
             else -> "자동 변경을 켜면 집중 선택·시작 시 할 일을 홈과 잠금화면 배경에 적용합니다. 선택한 색은 다음 적용부터 반영됩니다.\n\n자동 변경을 꺼도 아래 미리보기에서 직접 적용할 수 있습니다. 집중 해제 시에는 할 일 문구를 지우고 적용했던 배경색만 남깁니다. 기존 배경 사진을 복원하지는 않습니다."
         }
