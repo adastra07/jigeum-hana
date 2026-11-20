@@ -32,6 +32,9 @@ class MainActivity : Activity() {
     private val soft = Color.rgb(234, 239, 235)
     private val canvas = Color.rgb(247, 248, 247)
     private lateinit var store: Store
+    private lateinit var noteRepository: NoteRepository
+    private lateinit var calendarUi: CalendarUi
+    private var trashKind = "tasks"
     private lateinit var page: LinearLayout
     private lateinit var pageScroll: ScrollView
     private lateinit var heading: TextView
@@ -62,6 +65,12 @@ class MainActivity : Activity() {
         window.statusBarColor = canvas; window.navigationBarColor = Color.WHITE
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         store = Store(this)
+        noteRepository = NoteRepository(this)
+        calendarUi = CalendarUi(this, noteRepository) { if (!isDestroyed) renderPage() }
+        savedInstanceState?.getString("calendarMonth")?.let { calendarUi.month = java.time.YearMonth.parse(it) }
+        savedInstanceState?.getString("calendarDate")?.let { calendarUi.selectedDate = java.time.LocalDate.parse(it) }
+        calendarUi.filter = savedInstanceState?.getString("calendarFilter").orEmpty()
+        trashKind = savedInstanceState?.getString("trashKind") ?: "tasks"
         screen = savedInstanceState?.getString("screen") ?: "tasks"
         if (store.categories().none { it.id == store.category }) store.category = DEFAULT_CATEGORY
         if (active() && store.timer.taskId.isEmpty()) {
@@ -139,10 +148,10 @@ class MainActivity : Activity() {
     }
     private fun renderPage() {
         page.removeAllViews()
-        heading.text = when (screen) { "trash" -> "휴지통"; "settings" -> "설정"; else -> "체크리스트" }
-        when (screen) { "trash" -> renderTrash(); "settings" -> renderSettings(); else -> renderTasks() }
+        heading.text = when (screen) { "calendar" -> "캘린더"; "trash" -> "휴지통"; "settings" -> "설정"; else -> "체크리스트" }
+        when (screen) { "calendar" -> calendarUi.render(page); "trash" -> renderTrash(); "settings" -> renderSettings(); else -> renderTasks() }
         navigation.removeAllViews()
-        listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, icon) ->
+        listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("calendar", "캘린더", R.drawable.ic_calendar), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, icon) ->
             val chosen = screen == id
             navigation.addView(flat(label, color = if (chosen) accent else muted) { screen = id; renderPage() }.apply {
                 textSize = 12f; setPadding(dp(12), dp(14), dp(12), dp(6)); setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
@@ -223,6 +232,16 @@ class MainActivity : Activity() {
         }
     }
     private fun renderTrash() {
+        row(page).apply {
+            listOf("tasks" to "할 일", "calendar" to "캘린더").forEach { (kind, label) ->
+                addView(flat(label, if (kind == trashKind) soft else Color.TRANSPARENT, if (kind == trashKind) ink else muted) {
+                    trashKind = kind; renderPage()
+                }.apply { isSelected = kind == trashKind }, LinearLayout.LayoutParams(0, -2, 1f))
+            }
+        }
+        gap(page, 8)
+        if (trashKind == "calendar") { calendarUi.renderTrash(page); return }
+
         val tasks = store.tasks().filter { it.deletedAt > 0 }.sortedByDescending { it.deletedAt }
         if (tasks.isEmpty()) { page.addView(text("휴지통이 비어 있습니다", 15f, muted).apply { setPadding(dp(8), dp(24), dp(8), 0) }); return }
         row(page).apply {
@@ -262,7 +281,7 @@ class MainActivity : Activity() {
         val count = store.tasks().count { it.deletedAt > 0 }
         if (count == 0) return
         AlertDialog.Builder(this).setTitle("휴지통을 비울까요?")
-            .setMessage("${count}개 항목이 영구 삭제됩니다. 삭제한 항목은 복원할 수 없습니다.")
+            .setMessage("할 일 휴지통의 ${count}개 항목이 영구 삭제됩니다. 캘린더 휴지통은 유지합니다. 삭제한 항목은 복원할 수 없습니다.")
             .setNegativeButton("취소", null).setPositiveButton("비우기") { _, _ ->
                 store.saveTasks(TrashOperations.empty(store.tasks())); renderPage(); toast("휴지통을 비웠습니다")
             }.show().apply { getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(muted) }
@@ -715,9 +734,12 @@ class MainActivity : Activity() {
         else if (!TimerEngine.notificationsAllowed(this)) toast("설정에서 앱 알림을 허용해 주세요.")
     }
     private fun openSettings(intent: Intent) { try { startActivity(intent) } catch (_: ActivityNotFoundException) { toast("휴대전화의 앱 설정에서 변경해 주세요.") } }
-    override fun onResume() { super.onResume(); TimerEngine.sync(this); renderPage(); handler.removeCallbacks(tick); handler.post(tick) }
+    override fun onResume() { super.onResume(); TimerEngine.sync(this); renderPage(); calendarUi.refreshDay(); handler.removeCallbacks(tick); handler.post(tick) }
     override fun onPause() { handler.removeCallbacks(tick); super.onPause() }
-    override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen); super.onSaveInstanceState(outState) }
+    override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen)
+        outState.putString("calendarMonth", calendarUi.month.toString()); outState.putString("calendarDate", calendarUi.selectedDate.toString())
+        outState.putString("calendarFilter", calendarUi.filter); outState.putString("trashKind", trashKind)
+        super.onSaveInstanceState(outState) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); TimerEngine.sync(this)
     }
@@ -743,6 +765,7 @@ class MainActivity : Activity() {
         }
         return hasText
     }
+    override fun onDestroy() { if (::noteRepository.isInitialized) noteRepository.close(); super.onDestroy() }
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     private fun row(parent: LinearLayout) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; parent.addView(this) }
