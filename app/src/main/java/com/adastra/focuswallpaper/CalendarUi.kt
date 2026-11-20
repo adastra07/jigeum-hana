@@ -20,6 +20,10 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
     var filter = ""
     private var dayDialog: AlertDialog? = null
     private var redrawDay: (() -> Unit)? = null
+    fun dispose() {
+        dayDialog?.setOnDismissListener(null); dayDialog?.dismiss()
+        dayDialog = null; redrawDay = null
+    }
     fun refreshDay() { if (dayDialog?.isShowing == true) redrawDay?.invoke() }
     fun render(parent: LinearLayout) {
         if (filter.isNotEmpty() && repo.categories().none { it.id == filter }) filter = ""

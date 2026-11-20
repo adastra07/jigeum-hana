@@ -765,7 +765,7 @@ class MainActivity : Activity() {
         }
         return hasText
     }
-    override fun onDestroy() { if (::noteRepository.isInitialized) noteRepository.close(); super.onDestroy() }
+    override fun onDestroy() { if (::calendarUi.isInitialized) calendarUi.dispose(); if (::noteRepository.isInitialized) noteRepository.close(); super.onDestroy() }
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     private fun row(parent: LinearLayout) = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; parent.addView(this) }

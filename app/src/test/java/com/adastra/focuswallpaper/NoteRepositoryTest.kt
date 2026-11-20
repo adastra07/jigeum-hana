@@ -92,4 +92,23 @@ class NoteRepositoryTest {
         assertEquals("빠른 입력", repo.notes().single().title)
         controller.stop().destroy()
     }
+    @Test fun calendarTabAndDayDialogOpenWithExistingChecklistScreen() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        fun find(root: View, predicate: (View) -> Boolean): View? {
+            if (predicate(root)) return root
+            if (root is ViewGroup) for (i in 0 until root.childCount) find(root.getChildAt(i), predicate)?.let { return it }
+            return null
+        }
+        val root = controller.get().window.decorView
+        val tab = find(root) { it is android.widget.TextView && it.text.toString() == "캘린더" }
+        assertNotNull(tab); tab!!.performClick()
+        assertNotNull(find(root) { it is android.widget.TextView && it.text.toString() == "오늘" })
+        val today = LocalDate.now()
+        val label = "${today.year}년 ${NoteUi(controller.get()).date(today)}"
+        val cell = find(root) { it.contentDescription?.toString() == label }
+        assertNotNull(cell); cell!!.performClick()
+        assertNotNull(org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog())
+        controller.pause().stop().destroy()
+    }
+
 }
