@@ -48,7 +48,9 @@ class CalendarInteractionTest {
         measure(root)
         val add = find(root) { it.contentDescription == "일정 추가" }!!
         val month = find(root) { it is CalendarMonthView }!!
-        val scroll = month.parent.parent as ScrollView
+        var ancestor = month.parent
+        while (ancestor !is ScrollView) ancestor = ancestor.parent
+        val scroll = ancestor
         assertTrue(add.parent is FrameLayout)
         assertSame(scroll.parent, add.parent)
         assertEquals(56, add.width); assertEquals(add.width, add.height)
@@ -66,6 +68,14 @@ class CalendarInteractionTest {
         measure(root)
         val month = find(root) { it is CalendarMonthView } as CalendarMonthView
         val before = month.shownMonth
+        val header = find(root) { it.tag == "calendar:header" }!!
+        val title = find(root) { it.tag == "calendar:month-label" } as TextView
+        val today = find(root) { it is TextView && it.text.toString() == "오늘" }!!
+        val search = find(root) { it.contentDescription == "캘린더 메모 검색" }!!
+        val fixed = listOf(header, title, today, search).associateWith { view ->
+            IntArray(2).also { view.getLocationOnScreen(it) }.toList()
+        }
+        assertNull(find(month) { it.tag == "calendar:header" })
         var movement = 0
         month.pager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, offset: Float, pixels: Int) { movement = maxOf(movement, pixels) }
@@ -73,10 +83,16 @@ class CalendarInteractionTest {
         assertTrue(month.pager.beginFakeDrag())
         month.pager.fakeDragBy(-month.width * .7f)
         assertTrue("Content must move while the finger is down", movement > 0)
+        fixed.forEach { (view, location) ->
+            assertEquals(location, IntArray(2).also { view.getLocationOnScreen(it) }.toList())
+            assertEquals(0f, view.translationX, 0f)
+        }
         month.pager.endFakeDrag()
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         measure(root)
         assertEquals(before.plusMonths(1), month.shownMonth)
+        assertEquals("${month.shownMonth.year}. ${month.shownMonth.monthValue}", title.text.toString())
+        assertSame(header, find(root) { it.tag == "calendar:header" })
         assertNull(ShadowAlertDialog.getLatestAlertDialog())
         month.showMonth(before)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
@@ -111,4 +127,57 @@ class CalendarInteractionTest {
         assertEquals(16, heading.paddingBottom)
         controller.pause().stop().destroy()
     }
+    @Test fun categoryGeometryMatchesAndSelectionKeepsManualScrollPosition() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        val store = Store(activity)
+        store.saveCategories(store.categories() + (0..14).map { TaskCategory("task$it", "목록$it") })
+        NoteRepository(activity).use { repo ->
+            (0..14).forEach { repo.saveCategory(NoteCategory("calendar$it", "목록$it", 0xffdddddd.toInt())) }
+        }
+        val root = activity.window.decorView
+        find(root) { it.tag == "nav:settings" }!!.performClick()
+        find(root) { it.tag == "nav:tasks" }!!.performClick()
+        measure(root)
+        val tasksStrip = find(root) { it.tag == "tasks:categories" }!!
+        val taskCard = find(root) { it.tag == "tasks:main-card" }!!
+        val taskTop = IntArray(2).also { taskCard.getLocationOnScreen(it) }[1]
+        val stripTop = IntArray(2).also { tasksStrip.getLocationOnScreen(it) }[1]
+        val taskButton = find(root) { it.tag == "tasks:category:task0" }!!
+        val buttonHeight = taskButton.height
+        val buttonWidth = taskButton.width
+        fun selectVisible(key: String) {
+            var scroll = find(root) { it.tag == "$key:category-scroll" } as android.widget.HorizontalScrollView
+            scroll.scrollTo(240, 0)
+            val offset = scroll.scrollX
+            assertTrue(offset > 0)
+            val content = scroll.getChildAt(0) as ViewGroup
+            val target = (0 until content.childCount).map { content.getChildAt(it) }
+                .first { !it.isSelected && it.left >= offset && it.right <= offset + scroll.width }
+            val tag = target.tag
+            target.performClick()
+            measure(root)
+            scroll = find(root) { it.tag == "$key:category-scroll" } as android.widget.HorizontalScrollView
+            assertEquals(offset, scroll.scrollX)
+            val selected = find(root) { it.tag == tag }!!
+            selected.performClick()
+            measure(root)
+            assertSame(selected, find(root) { it.tag == tag })
+            assertEquals(offset, scroll.scrollX)
+        }
+        selectVisible("tasks")
+        find(root) { it.tag == "nav:calendar" }!!.performClick()
+        measure(root)
+        val calendarStrip = find(root) { it.tag == "calendar:categories" }!!
+        val calendarCard = find(root) { it.tag == "calendar:main-card" }!!
+        assertEquals(tasksStrip.height, calendarStrip.height)
+        assertEquals(stripTop, IntArray(2).also { calendarStrip.getLocationOnScreen(it) }[1])
+        assertEquals(taskTop, IntArray(2).also { calendarCard.getLocationOnScreen(it) }[1])
+        val calendarButton = find(root) { it.tag == "calendar:category:calendar0" }!!
+        assertEquals(buttonHeight, calendarButton.height)
+        assertEquals(buttonWidth, calendarButton.width)
+        selectVisible("calendar")
+        controller.pause().stop().destroy()
+    }
+
 }

@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var restart: TextView
     private lateinit var pause: TextView
     private lateinit var navigation: LinearLayout
+    private var taskCategoryOffset = 0
     private var calendarViewport = -1
     private var calendarResizePosted = false
     private var screen = "tasks"
@@ -219,27 +220,13 @@ class MainActivity : Activity() {
     }
     private fun renderTasks() {
         val categories = store.categories()
-        val tabs = row(page)
-        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val scroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(strip) }
-        tabs.addView(scroll, LinearLayout.LayoutParams(0, dp(52), 1f))
-        var selectedTab: View? = null
-        categories.forEach { category ->
-            val chosen = category.id == store.category
-            val tab = flat(category.name, if (chosen) soft else Color.TRANSPARENT, if (chosen) ink else muted) {
-                store.category = category.id; renderPage()
-            }.apply {
-                setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
-                setOnLongClickListener { categoryMenu(category); true }
-                isSelected = chosen
-            }
-            strip.addView(tab, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(6) })
-            if (chosen) selectedTab = tab
-        }
-        scroll.post { selectedTab?.let { scroll.smoothScrollTo((it.left - dp(8)).coerceAtLeast(0), 0) } }
-        tabs.addView(flat("+") { editCategory(null) }.apply { textSize = 25f; contentDescription = "분류 추가" }, LinearLayout.LayoutParams(dp(44), dp(48)))
+        page.addView(CategoryStrip(this, "tasks", categories.map { it.id to it.name }, store.category,
+            taskCategoryOffset, { taskCategoryOffset = it },
+            { id -> store.category = id; renderPage() },
+            { id -> categories.firstOrNull { it.id == id }?.let { categoryMenu(it) } },
+            { editCategory(null) }))
         gap(page, 8)
-        val card = card(page)
+        val card = card(page).apply { tag = "tasks:main-card" }
         val tasks = store.tasks().filter { it.deletedAt == 0L && it.categoryId == store.category }
         if (tasks.isEmpty()) card.addView(text("할 일을 추가해 주세요", 14f, muted).apply { setPadding(dp(10), dp(14), dp(10), dp(14)) })
         val categoryId = store.category

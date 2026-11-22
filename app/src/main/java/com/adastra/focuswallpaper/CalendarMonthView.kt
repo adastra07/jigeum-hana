@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 object CalendarLayout {
-    fun rowHeight(viewportDp: Int): Int = ((viewportDp - 112) / 6).coerceIn(48, 72)
+    fun rowHeight(viewportDp: Int): Int = ((viewportDp - 136) / 6).coerceIn(48, 72)
     fun dateInMonth(date: LocalDate, month: YearMonth): LocalDate = month.atDay(minOf(date.dayOfMonth, month.lengthOfMonth()))
 }
 
