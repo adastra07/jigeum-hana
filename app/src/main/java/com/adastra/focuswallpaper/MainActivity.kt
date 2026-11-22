@@ -45,6 +45,8 @@ class MainActivity : Activity() {
     private lateinit var restart: TextView
     private lateinit var pause: TextView
     private lateinit var navigation: LinearLayout
+    private var calendarViewport = -1
+    private var calendarResizePosted = false
     private var screen = "tasks"
     private var renderedSelection: String? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -120,11 +122,18 @@ class MainActivity : Activity() {
         })
         root.addView(contentFrame, LinearLayout.LayoutParams(-1, 0, 1f))
         pageScroll.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            if (screen == "calendar" && bottom - top != oldBottom - oldTop && bottom > top) renderPage()
+            if (screen == "calendar" && bottom > top && bottom - top != calendarViewport && !calendarResizePosted) {
+                calendarResizePosted = true
+                pageScroll.post {
+                    calendarResizePosted = false
+                    if (!isDestroyed && screen == "calendar" && pageScroll.height != calendarViewport) renderPage()
+                }
+            }
         }
         root.addView(View(this).apply { setBackgroundColor(Color.rgb(229, 232, 229)) }, LinearLayout.LayoutParams(-1, dp(1)))
         navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE) }
         root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
+        buildNavigation()
         renderPage()
     }
     private fun active() = store.timer.status in listOf("running", "paused")
@@ -166,25 +175,47 @@ class MainActivity : Activity() {
     private fun renderPage() {
         page.removeAllViews()
         calendarAddButton.visibility = if (screen == "calendar") View.VISIBLE else View.GONE
-        heading.textSize = if (screen == "calendar") 24f else 26f
-        heading.setPadding(dp(20), dp(if (screen == "calendar") 8 else 12), dp(20), dp(if (screen == "calendar") 4 else 8))
+        heading.textSize = 26f
+        heading.setPadding(dp(20), dp(12), dp(20), dp(16))
+        calendarViewport = pageScroll.height
         page.setPadding(dp(16), 0, dp(16), dp(if (screen == "calendar") 80 else 16))
         heading.text = when (screen) { "calendar" -> "캘린더"; "trash" -> "휴지통"; "settings" -> "설정"; else -> "체크리스트" }
         when (screen) { "calendar" -> calendarUi.render(page, pageScroll.height - page.paddingTop - page.paddingBottom); "trash" -> renderTrash(); "settings" -> renderSettings(); else -> renderTasks() }
-        navigation.removeAllViews()
-        listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("calendar", "캘린더", R.drawable.ic_calendar), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, icon) ->
-            val chosen = screen == id
-            navigation.addView(flat(label, color = if (chosen) accent else muted) { screen = id; renderPage() }.apply {
-                textSize = 12f; setPadding(dp(12), dp(14), dp(12), dp(6)); setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
-                val drawable = getDrawable(icon)!!.mutate().apply { setTint(if (chosen) accent else muted); setBounds(0, 0, dp(24), dp(24)) }
-                setCompoundDrawables(null, drawable, null, null); compoundDrawablePadding = dp(6)
-                isSelected = chosen
-            }, LinearLayout.LayoutParams(0, -1, 1f))
-        }
+        updateNavigation()
         fitTextControls(page)
-        fitTextControls(navigation)
         renderedSelection = store.selected
         updateFocus()
+    }
+    private fun buildNavigation() {
+        listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("calendar", "캘린더", R.drawable.ic_calendar), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, resource) ->
+            val item = column().apply {
+                tag = "nav:$id"; gravity = Gravity.CENTER; setPadding(dp(4), dp(10), dp(4), dp(6))
+                background = ripple(Color.WHITE); isClickable = true; isFocusable = true
+                contentDescription = label
+                setOnClickListener { if (screen != id) { screen = id; renderPage() } }
+            }
+            item.addView(ImageView(this).apply {
+                tag = "nav-icon:$id"; setImageResource(resource)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(24), dp(24)))
+            item.addView(text(label, 12f).apply {
+                gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0)
+                setOnClickListener { item.performClick() }
+            }, LinearLayout.LayoutParams(-1, -2))
+            navigation.addView(item, LinearLayout.LayoutParams(0, -1, 1f))
+        }
+    }
+    private fun updateNavigation() {
+        for (i in 0 until navigation.childCount) {
+            val item = navigation.getChildAt(i) as LinearLayout
+            val chosen = item.tag == "nav:$screen"
+            item.isSelected = chosen
+            (item.getChildAt(0) as ImageView).setColorFilter(if (chosen) accent else muted)
+            (item.getChildAt(1) as TextView).apply {
+                setTextColor(if (chosen) accent else muted)
+                setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
+            }
+        }
     }
     private fun renderTasks() {
         val categories = store.categories()
@@ -766,6 +797,7 @@ class MainActivity : Activity() {
     }
     // Keep ordinary controls compact, but let text and its containers grow with font size.
     private fun fitTextControls(view: View): Boolean {
+        if (view is CalendarMonthView) return false
         var hasText = view is TextView
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {

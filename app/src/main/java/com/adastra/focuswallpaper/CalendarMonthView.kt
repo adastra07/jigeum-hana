@@ -1,15 +1,17 @@
 package com.adastra.focuswallpaper
 
 import android.content.Context
-import android.view.MotionEvent
-import android.view.ViewConfiguration
-import android.widget.LinearLayout
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.abs
 
 object CalendarLayout {
-    fun rowHeight(viewportDp: Int): Int = ((viewportDp - 104) / 6).coerceIn(48, 72)
+    fun rowHeight(viewportDp: Int): Int = ((viewportDp - 112) / 6).coerceIn(48, 72)
     fun swipeDirection(dx: Float, dy: Float, width: Int, density: Float): Int {
         val threshold = maxOf(48f * density, width * .16f)
         if (abs(dx) < threshold || abs(dx) < abs(dy) * 1.4f) return 0
@@ -18,49 +20,47 @@ object CalendarLayout {
     fun dateInMonth(date: LocalDate, month: YearMonth): LocalDate = month.atDay(minOf(date.dayOfMonth, month.lengthOfMonth()))
 }
 
-/** Intercept horizontal drags before date/note clicks; leave vertical scrolls to the page. */
-class CalendarMonthView(context: Context, private val changeMonth: (Int) -> Unit) : LinearLayout(context) {
-    private val slop = ViewConfiguration.get(context).scaledTouchSlop
-    private var downX = 0f
-    private var downY = 0f
-    private var dragging = false
-    private var cancelled = false
-    init { orientation = VERTICAL }
-    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                downX = event.rawX; downY = event.rawY; dragging = false; cancelled = false
+/** Standard horizontally paged months: drag feedback, neighbouring pages and snap/fling. */
+class CalendarMonthView(
+    context: Context,
+    private val origin: YearMonth,
+    private val pageHeight: Int,
+    createPage: (YearMonth) -> View,
+    private val selected: (YearMonth) -> Unit,
+    private val settled: () -> Unit
+) : FrameLayout(context) {
+    val pager = ViewPager2(context)
+    private val centre = 1200
+    val shownMonth: YearMonth get() = origin.plusMonths((pager.currentItem - centre).toLong())
+    init {
+        contentDescription = "월간 달력, 좌우로 밀어 월 이동"
+        pager.orientation = ViewPager2.ORIENTATION_HORIZONTAL
+        pager.offscreenPageLimit = 1
+        pager.adapter = object : RecyclerView.Adapter<MonthHolder>() {
+            override fun getItemCount() = centre * 2 + 1
+            override fun onCreateViewHolder(parent: ViewGroup, type: Int): MonthHolder = MonthHolder(FrameLayout(context).apply {
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            })
+            override fun onBindViewHolder(holder: MonthHolder, position: Int) {
+                holder.host.removeAllViews()
+                holder.host.addView(createPage(origin.plusMonths((position - centre).toLong())), FrameLayout.LayoutParams(-1, -1))
             }
-            MotionEvent.ACTION_POINTER_DOWN -> { cancelled = true; dragging = false; parent?.requestDisallowInterceptTouchEvent(false) }
-            MotionEvent.ACTION_MOVE -> {
-                val dx = event.rawX - downX; val dy = event.rawY - downY
-                if (!cancelled && abs(dx) > slop && abs(dx) > abs(dy) * 1.4f) {
-                    dragging = true; parent?.requestDisallowInterceptTouchEvent(true); return true
-                }
-            }
-            MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> { dragging = false }
         }
-        return dragging
+        addView(pager, LayoutParams(-1, -1))
+        pager.setCurrentItem(centre, false)
+        pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) { selected(origin.plusMonths((position - centre).toLong())) }
+            override fun onPageScrollStateChanged(state: Int) { if (state == ViewPager2.SCROLL_STATE_IDLE) settled() }
+        })
     }
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) return true
-        if (!dragging && !cancelled && event.actionMasked == MotionEvent.ACTION_MOVE) {
-            val dx = event.rawX - downX; val dy = event.rawY - downY
-            if (abs(dx) > slop && abs(dx) > abs(dy) * 1.4f) {
-                dragging = true; parent?.requestDisallowInterceptTouchEvent(true)
-            }
-        }
-        if (!dragging) return true
-        when (event.actionMasked) {
-            MotionEvent.ACTION_MOVE -> { /* The gesture stays on the month surface, without moving the page. */ }
-            MotionEvent.ACTION_POINTER_DOWN -> cancelled = true
-            MotionEvent.ACTION_UP -> {
-                val direction = if (cancelled) 0 else CalendarLayout.swipeDirection(event.rawX - downX, event.rawY - downY, width, resources.displayMetrics.density)
-                dragging = false; parent?.requestDisallowInterceptTouchEvent(false)
-                if (direction != 0) changeMonth(direction)
-            }
-            MotionEvent.ACTION_CANCEL -> { dragging = false; parent?.requestDisallowInterceptTouchEvent(false) }
-        }
-        return true
+    private class MonthHolder(val host: FrameLayout) : RecyclerView.ViewHolder(host)
+    fun showMonth(month: YearMonth) {
+        val position = (java.time.temporal.ChronoUnit.MONTHS.between(origin, month) + centre).toInt()
+        if (position !in 0..centre * 2) return
+        if (position == pager.currentItem) { selected(month); settled() }
+        else pager.setCurrentItem(position, true)
+    }
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(pageHeight, MeasureSpec.EXACTLY))
     }
 }

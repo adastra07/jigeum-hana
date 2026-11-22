@@ -57,26 +57,56 @@ class CalendarInteractionTest {
         assertEquals(NoteEditorActivity::class.java.name, intent.component!!.className)
         controller.pause().stop().destroy()
     }
-    @Test fun horizontalSwipeChangesMonthWithoutOpeningDateDialogAndVerticalSwipeDoesNot() {
+    @Test fun monthsFollowDragAndSnapToNeighbourWithoutOpeningDialog() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val root = controller.get().window.decorView
-        find(root) { it is TextView && it.text.toString() == "캘린더" }!!.performClick()
+        find(root) { it.tag == "nav:calendar" }!!.performClick()
         measure(root)
-        val before = YearMonth.now()
-        var month = find(root) { it is CalendarMonthView }!!
-        swipe(month, 270f, 50f, 160f, 165f)
+        val month = find(root) { it is CalendarMonthView } as CalendarMonthView
+        val before = month.shownMonth
+        var movement = 0
+        month.pager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            override fun onPageScrolled(position: Int, offset: Float, pixels: Int) { movement = maxOf(movement, pixels) }
+        })
+        assertTrue(month.pager.beginFakeDrag())
+        month.pager.fakeDragBy(-month.width * .7f)
+        assertTrue("Content must move while the finger is down", movement > 0)
+        month.pager.endFakeDrag()
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         measure(root)
-        val next = before.plusMonths(1)
-        assertNotNull(find(root) { it is TextView && it.text.toString() == "${next.year}. ${next.monthValue}" })
+        assertEquals(before.plusMonths(1), month.shownMonth)
         assertNull(ShadowAlertDialog.getLatestAlertDialog())
-        month = find(root) { it is CalendarMonthView }!!
-        swipe(month, 50f, 270f, 160f, 165f)
+        month.showMonth(before)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         measure(root)
-        assertNotNull(find(root) { it is TextView && it.text.toString() == "${before.year}. ${before.monthValue}" })
-        month = find(root) { it is CalendarMonthView }!!
+        assertEquals(before, month.shownMonth)
         swipe(month, 100f, 108f, 200f, 70f)
         measure(root)
-        assertNotNull(find(root) { it is TextView && it.text.toString() == "${before.year}. ${before.monthValue}" })
+        assertEquals(before, month.shownMonth)
+        controller.pause().stop().destroy()
+    }
+    @Test fun navigationIconsSurviveRepeatedTabSwitchAndCalendarResize() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val root = controller.get().window.decorView
+        val ids = listOf("tasks", "calendar", "trash", "settings")
+        val icons = ids.map { id -> find(root) { it.tag == "nav-icon:$id" }!! }
+        repeat(3) {
+            ids.forEach { id ->
+                find(root) { it.tag == "nav:$id" }!!.performClick()
+                measure(root)
+                ids.forEachIndexed { i, name ->
+                    val icon = find(root) { it.tag == "nav-icon:$name" } as android.widget.ImageView
+                    assertSame(icons[i], icon)
+                    assertNotNull(icon.drawable)
+                    assertEquals(View.VISIBLE, icon.visibility)
+                    assertEquals(24, icon.width); assertEquals(24, icon.height)
+                }
+            }
+        }
+        find(root) { it.tag == "nav:calendar" }!!.performClick()
+        measure(root)
+        val heading = find(root) { it is TextView && it.text.toString() == "캘린더" && it.parent != null && it.paddingBottom == 16 }!!
+        assertEquals(16, heading.paddingBottom)
         controller.pause().stop().destroy()
     }
 }
