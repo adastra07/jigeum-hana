@@ -141,9 +141,10 @@ class CalendarInteractionTest {
         val activity = controller.get()
         val store = Store(activity)
         store.saveCategories(store.categories() + (0..14).map { TaskCategory("task$it", "목록$it") })
-        NoteRepository(activity).use { repo ->
+        val repo = NoteRepository(activity)
+        try {
             (0..14).forEach { repo.saveCategory(NoteCategory("calendar$it", "목록$it", 0xffdddddd.toInt())) }
-        }
+        } finally { repo.close() }
         val root = activity.window.decorView
         find(root) { it.tag == "nav:settings" }!!.performClick()
         find(root) { it.tag == "nav:tasks" }!!.performClick()
