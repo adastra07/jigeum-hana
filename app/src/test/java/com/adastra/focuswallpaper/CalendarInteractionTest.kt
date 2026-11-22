@@ -34,6 +34,14 @@ class CalendarInteractionTest {
             shadowOf(Looper.getMainLooper()).idle()
         }
     }
+    private fun preview(root: View, name: String) {
+        val bitmap = android.graphics.Bitmap.createBitmap(root.width, root.height, android.graphics.Bitmap.Config.ARGB_8888)
+        root.draw(android.graphics.Canvas(bitmap))
+        val file = java.io.File("build/reports/ui/$name.png")
+        file.parentFile!!.mkdirs()
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+    }
     private fun swipe(view: View, fromX: Float, toX: Float, fromY: Float, toY: Float) {
         val now = android.os.SystemClock.uptimeMillis()
         listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP).forEachIndexed { i, action ->
@@ -55,7 +63,8 @@ class CalendarInteractionTest {
         assertSame(scroll.parent, add.parent)
         assertEquals(56, add.width); assertEquals(add.width, add.height)
         assertTrue("month=${month.height}, scroll=${scroll.height}, top=${month.top}, display=${root.resources.displayMetrics}", month.height < scroll.height)
-        assertTrue("monthBottom=${month.bottom}, scroll=${scroll.height}", month.bottom + 48 <= scroll.height)
+        val card = find(root) { it.tag == "calendar:main-card" }!!
+        assertTrue("cardBottom=${card.bottom}, scroll=${scroll.height}", card.bottom + 48 <= scroll.height)
         add.performClick()
         val intent = shadowOf(controller.get()).nextStartedActivity
         assertEquals(NoteEditorActivity::class.java.name, intent.component!!.className)
@@ -165,6 +174,7 @@ class CalendarInteractionTest {
             assertSame(selected, find(root) { it.tag == tag })
             assertEquals(offset, scroll.scrollX)
         }
+        preview(root, "checklist")
         selectVisible("tasks")
         find(root) { it.tag == "nav:calendar" }!!.performClick()
         measure(root)
@@ -176,6 +186,7 @@ class CalendarInteractionTest {
         val calendarButton = find(root) { it.tag == "calendar:category:calendar0" }!!
         assertEquals(buttonHeight, calendarButton.height)
         assertEquals(buttonWidth, calendarButton.width)
+        preview(root, "calendar")
         selectVisible("calendar")
         controller.pause().stop().destroy()
     }
