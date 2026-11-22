@@ -14,11 +14,13 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowAlertDialog
 import java.time.YearMonth
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28], qualifiers = "w360dp-h740dp-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CalendarInteractionTest {
     private fun find(root: View, predicate: (View) -> Boolean): View? {
         if (predicate(root)) return root
