@@ -25,10 +25,10 @@ class CalendarInteractionTest {
         if (root is ViewGroup) for (i in 0 until root.childCount) find(root.getChildAt(i), predicate)?.let { return it }
         return null
     }
-    private fun measure(root: View) {
+    private fun measure(root: View, height: Int = 740) {
         repeat(3) {
-            root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(740, View.MeasureSpec.EXACTLY))
-            root.layout(0, 0, 360, 740)
+            root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, 360, height)
             shadowOf(Looper.getMainLooper()).idle()
         }
     }
@@ -93,7 +93,7 @@ class CalendarInteractionTest {
         repeat(3) {
             ids.forEach { id ->
                 find(root) { it.tag == "nav:$id" }!!.performClick()
-                measure(root)
+                measure(root, if (id == "calendar") 700 else 740)
                 ids.forEachIndexed { i, name ->
                     val icon = find(root) { it.tag == "nav-icon:$name" } as android.widget.ImageView
                     assertSame(icons[i], icon)

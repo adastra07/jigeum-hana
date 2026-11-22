@@ -8,15 +8,9 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import java.time.LocalDate
 import java.time.YearMonth
-import kotlin.math.abs
 
 object CalendarLayout {
     fun rowHeight(viewportDp: Int): Int = ((viewportDp - 112) / 6).coerceIn(48, 72)
-    fun swipeDirection(dx: Float, dy: Float, width: Int, density: Float): Int {
-        val threshold = maxOf(48f * density, width * .16f)
-        if (abs(dx) < threshold || abs(dx) < abs(dy) * 1.4f) return 0
-        return if (dx < 0) 1 else -1
-    }
     fun dateInMonth(date: LocalDate, month: YearMonth): LocalDate = month.atDay(minOf(date.dayOfMonth, month.lengthOfMonth()))
 }
 

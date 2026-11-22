@@ -6,13 +6,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 class CalendarLayoutTest {
-    @Test fun monthSwipeRequiresClearHorizontalMovement() {
-        assertEquals(1, CalendarLayout.swipeDirection(-100f, 8f, 360, 1f))
-        assertEquals(-1, CalendarLayout.swipeDirection(100f, -8f, 360, 1f))
-        assertEquals(0, CalendarLayout.swipeDirection(20f, 0f, 360, 1f))
-        assertEquals(0, CalendarLayout.swipeDirection(100f, 160f, 360, 1f))
-        assertEquals(0, CalendarLayout.swipeDirection(80f, 0f, 720, 2f))
-    }
     @Test fun rowsStayCompactAndFitOrdinaryViewport() {
         assertEquals(48, CalendarLayout.rowHeight(300))
         assertEquals(64, CalendarLayout.rowHeight(500))
