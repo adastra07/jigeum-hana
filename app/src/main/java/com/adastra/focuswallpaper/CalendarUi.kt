@@ -25,31 +25,39 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
         dayDialog = null; redrawDay = null
     }
     fun refreshDay() { if (dayDialog?.isShowing == true) redrawDay?.invoke() }
-    fun render(parent: LinearLayout) {
+    fun addMemo() { open(null, selectedDate) }
+    private fun moveMonth(direction: Int) {
+        month = month.plusMonths(direction.toLong())
+        selectedDate = CalendarLayout.dateInMonth(selectedDate, month)
+        redraw()
+    }
+    fun render(parent: LinearLayout, viewportHeight: Int = 0) {
         if (filter.isNotEmpty() && repo.categories().none { it.id == filter }) filter = ""
-        ui.row(parent).apply {
-            addView(ui.button("오늘") { month = YearMonth.now(); selectedDate = LocalDate.now(); redraw() }, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(ui.icon(R.drawable.ic_search, "캘린더 메모 검색") { search() }, LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)))
-        }
         categoryBar(parent) { redraw() }
-        val card = ui.column().apply { background = ui.shape(Color.WHITE, 10) }
+        val card = CalendarMonthView(activity) { moveMonth(it) }.apply { background = ui.shape(Color.WHITE, 10); contentDescription = "월간 달력, 좌우로 밀어 월 이동" }
         parent.addView(card)
         ui.row(card).apply {
-            addView(ui.button("‹") { month = month.minusMonths(1); redraw() }.apply { contentDescription = "이전 달" }, LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)))
+            addView(ui.button("‹") { moveMonth(-1) }.apply { contentDescription = "이전 달" }, LinearLayout.LayoutParams(ui.dp(36), ui.dp(40)))
             addView(ui.button("${month.year}. ${month.monthValue}") { chooseDate(month.atDay(1)) { month = YearMonth.from(it); selectedDate = it; redraw() } }.apply {
-                textSize = 21f; setTypeface(null, Typeface.BOLD); contentDescription = "연도와 월 선택"
+                textSize = 19f; setPadding(ui.dp(2), ui.dp(4), ui.dp(2), ui.dp(4)); setTypeface(null, Typeface.BOLD); contentDescription = "연도와 월 선택"
             }, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(ui.button("›") { month = month.plusMonths(1); redraw() }.apply { contentDescription = "다음 달" }, LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)))
+            addView(ui.button("›") { moveMonth(1) }.apply { contentDescription = "다음 달" }, LinearLayout.LayoutParams(ui.dp(36), ui.dp(40)))
+            addView(ui.button("오늘") { month = YearMonth.now(); selectedDate = LocalDate.now(); redraw() }.apply { textSize = 12f; setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4)) }, LinearLayout.LayoutParams(ui.dp(40), -2))
+            addView(ui.icon(R.drawable.ic_search, "캘린더 메모 검색") { search() }.apply { setPadding(ui.dp(7), ui.dp(7), ui.dp(7), ui.dp(7)) }, LinearLayout.LayoutParams(ui.dp(38), ui.dp(40)))
         }
         ui.row(card).apply {
             listOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, day ->
-                addView(ui.text(day, 12f, if (i == 0) 0xffb95b5b.toInt() else ui.muted).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, ui.dp(28), 1f))
+                addView(ui.text(day, 12f, if (i == 0) 0xffb95b5b.toInt() else ui.muted).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, ui.dp(24), 1f))
             }
         }
         val notes = repo.notes()
         val categories = repo.categories().associateBy { it.id }
         val heightDp = (activity.resources.displayMetrics.heightPixels / activity.resources.displayMetrics.density).toInt()
-        val cellHeight = ((heightDp - 320) / 6).coerceIn(76, 104)
+        val viewportDp = if (viewportHeight > 0) (viewportHeight / activity.resources.displayMetrics.density).toInt() else heightDp - 208
+        val cellHeight = CalendarLayout.rowHeight(viewportDp)
+        val fontHeight = ui.text("", 10f).paint.fontMetricsInt.let { it.bottom - it.top }
+        val entryHeight = maxOf(ui.dp(14), fontHeight) + ui.dp(2)
+        val capacity = ((ui.dp(cellHeight - 28) - maxOf(ui.dp(12), fontHeight)) / entryHeight).coerceIn(1, 3)
         CalendarDates.cells(month).chunked(7).forEach { week ->
             val line = ui.row(card).apply { gravity = Gravity.TOP }
             week.forEach { date ->
@@ -68,26 +76,22 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
                     gravity = Gravity.CENTER
                     if (date == LocalDate.now()) { background = ui.shape(ui.ink, 5); setTextColor(Color.WHITE) }
                 }
-                cell.addView(day, LinearLayout.LayoutParams(ui.dp(26), ui.dp(26)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+                cell.addView(day, LinearLayout.LayoutParams(ui.dp(24), ui.dp(22)).apply { gravity = Gravity.CENTER_HORIZONTAL })
                 val entries = CalendarDates.entries(notes, date, filter)
-                entries.take(3).forEach { note ->
+                entries.take(capacity).forEach { note ->
                     val category = categories[note.categoryId] ?: categories.getValue(NOTE_UNCATEGORIZED)
                     val label = ui.text(note.displayTitle, 10f).apply {
                         isSingleLine = true; ellipsize = TextUtils.TruncateAt.END; setPadding(ui.dp(2), 0, ui.dp(2), 0)
-                        background = ui.shape(category.color, 2); minimumHeight = ui.dp(15)
+                        background = ui.shape(category.color, 2); minimumHeight = ui.dp(14)
                         alpha = if (currentMonth) 1f else .65f
                         contentDescription = "${note.displayTitle}, ${ui.scheduleLabel(note.schedule!!)}, ${category.name}"
                         isClickable = true; isFocusable = true; setOnClickListener { open(note, date) }
                     }
                     cell.addView(label, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = ui.dp(2) })
                 }
-                if (entries.size > 3) cell.addView(ui.text("+${entries.size - 3}", 10f, ui.muted))
+                if (entries.size > capacity) cell.addView(ui.text("+${entries.size - capacity}", 9f, ui.muted).apply { setPadding(ui.dp(2), 0, 0, 0) })
                 line.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
             }
-        }
-        ui.row(parent).apply {
-            addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f))
-            addView(ui.button("+ ", ui.soft) { open(null, selectedDate) }.apply { textSize = 27f; contentDescription = "${ui.date(selectedDate)} 메모 추가" }, LinearLayout.LayoutParams(ui.dp(56), ui.dp(52)).apply { topMargin = ui.dp(10) })
         }
     }
     private fun categoryBar(parent: LinearLayout, changed: () -> Unit) {
@@ -100,6 +104,7 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
         all.forEach { category ->
             val chosen = filter == category.id
             val button = ui.button(category.name, if (chosen) ui.soft else Color.TRANSPARENT) { filter = category.id; changed() }.apply {
+                minimumHeight = ui.dp(36); setPadding(ui.dp(10), ui.dp(4), ui.dp(10), ui.dp(4))
                 isSelected = chosen; setTextColor(if (chosen) ui.ink else ui.muted)
                 setTypeface(null, if (chosen) Typeface.BOLD else Typeface.NORMAL)
                 if (category.id.isNotEmpty()) setOnLongClickListener { categoryMenu(category, changed); true }

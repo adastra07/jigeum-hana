@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private var trashKind = "tasks"
     private lateinit var page: LinearLayout
     private lateinit var pageScroll: ScrollView
+    private lateinit var calendarAddButton: ImageButton
     private lateinit var heading: TextView
     private lateinit var timerPanel: LinearLayout
     private lateinit var focus: TextView
@@ -104,7 +105,23 @@ class MainActivity : Activity() {
         timerPanel.addView(flat("×") { clearFocus() }.apply { textSize = 24f; contentDescription = "집중 해제" }, LinearLayout.LayoutParams(dp(44), dp(44)))
         page = column().apply { setPadding(dp(16), 0, dp(16), dp(16)) }
         pageScroll = ScrollView(this).apply { isFillViewport = true; addView(page) }
-        root.addView(pageScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val contentFrame = FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        contentFrame.addView(pageScroll, FrameLayout.LayoutParams(-1, -1))
+        calendarAddButton = ImageButton(this).apply {
+            contentDescription = "일정 추가"; setImageResource(R.drawable.ic_add); setColorFilter(Color.WHITE)
+            val circle = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(accent) }
+            val mask = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) }
+            background = RippleDrawable(ColorStateList.valueOf(0x33ffffff), circle, mask)
+            setPadding(dp(16), dp(16), dp(16), dp(16)); elevation = dp(4).toFloat(); stateListAnimator = null
+            setOnClickListener { calendarUi.addMemo() }
+        }
+        contentFrame.addView(calendarAddButton, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.BOTTOM or Gravity.END).apply {
+            setMargins(dp(16), dp(16), dp(20), dp(16))
+        })
+        root.addView(contentFrame, LinearLayout.LayoutParams(-1, 0, 1f))
+        pageScroll.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (screen == "calendar" && bottom - top != oldBottom - oldTop && bottom > top) renderPage()
+        }
         root.addView(View(this).apply { setBackgroundColor(Color.rgb(229, 232, 229)) }, LinearLayout.LayoutParams(-1, dp(1)))
         navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.WHITE) }
         root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
@@ -148,8 +165,12 @@ class MainActivity : Activity() {
     }
     private fun renderPage() {
         page.removeAllViews()
+        calendarAddButton.visibility = if (screen == "calendar") View.VISIBLE else View.GONE
+        heading.textSize = if (screen == "calendar") 24f else 26f
+        heading.setPadding(dp(20), dp(if (screen == "calendar") 8 else 12), dp(20), dp(if (screen == "calendar") 4 else 8))
+        page.setPadding(dp(16), 0, dp(16), dp(if (screen == "calendar") 80 else 16))
         heading.text = when (screen) { "calendar" -> "캘린더"; "trash" -> "휴지통"; "settings" -> "설정"; else -> "체크리스트" }
-        when (screen) { "calendar" -> calendarUi.render(page); "trash" -> renderTrash(); "settings" -> renderSettings(); else -> renderTasks() }
+        when (screen) { "calendar" -> calendarUi.render(page, pageScroll.height - page.paddingTop - page.paddingBottom); "trash" -> renderTrash(); "settings" -> renderSettings(); else -> renderTasks() }
         navigation.removeAllViews()
         listOf(Triple("tasks", "체크리스트", R.drawable.ic_checklist), Triple("calendar", "캘린더", R.drawable.ic_calendar), Triple("trash", "휴지통", R.drawable.ic_trash), Triple("settings", "설정", R.drawable.ic_settings)).forEach { (id, label, icon) ->
             val chosen = screen == id
