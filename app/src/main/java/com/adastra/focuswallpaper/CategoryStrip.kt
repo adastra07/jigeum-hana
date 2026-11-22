@@ -24,7 +24,18 @@ class CategoryStrip(
         tag = "$key:categories"; orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         minimumHeight = ui.dp(52)
         val strip = LinearLayout(activity).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val scroll = HorizontalScrollView(activity).apply {
+        val scroll = object : HorizontalScrollView(activity) {
+            private var restore = true
+            override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+                super.onLayout(changed, left, top, right, bottom)
+                if (restore) {
+                    restore = false
+                    scrollTo(offset, 0)
+                    saveOffset(scrollX)
+                    setOnScrollChangeListener { _, x, _, _, _ -> saveOffset(x) }
+                }
+            }
+        }.apply {
             tag = "$key:category-scroll"; isHorizontalScrollBarEnabled = false
             isFillViewport = false; addView(strip)
         }
@@ -44,9 +55,5 @@ class CategoryStrip(
         addView(ui.button("+") { add() }.apply {
             contentDescription = if (key == "tasks") "분류 추가" else "캘린더 분류 추가"
         }, LayoutParams(ui.dp(40), ui.dp(40)))
-        scroll.post {
-            scroll.scrollTo(offset, 0)
-            scroll.setOnScrollChangeListener { _, x, _, _, _ -> saveOffset(x) }
-        }
     }
 }

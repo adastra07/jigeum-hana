@@ -166,6 +166,7 @@ class CalendarInteractionTest {
                 .first { !it.isSelected && it.left >= offset && it.right <= offset + scroll.width }
             val tag = target.tag
             target.performClick()
+            shadowOf(Looper.getMainLooper()).idle()
             measure(root)
             scroll = find(root) { it.tag == "$key:category-scroll" } as android.widget.HorizontalScrollView
             assertEquals(offset, scroll.scrollX)
