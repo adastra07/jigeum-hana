@@ -102,6 +102,11 @@ class NoteRepositoryTest {
         val root = controller.get().window.decorView
         val tab = find(root) { it is android.widget.TextView && it.text.toString() == "캘린더" }
         assertNotNull(tab); tab!!.performClick()
+        repeat(3) {
+            root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(740, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, 360, 740)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        }
         assertNotNull(find(root) { it is android.widget.TextView && it.text.toString() == "오늘" })
         val today = LocalDate.now()
         val label = "${today.year}년 ${NoteUi(controller.get()).date(today)}"

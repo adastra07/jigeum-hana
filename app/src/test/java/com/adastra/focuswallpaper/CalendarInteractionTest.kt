@@ -50,8 +50,8 @@ class CalendarInteractionTest {
         assertTrue(add.parent is FrameLayout)
         assertSame(scroll.parent, add.parent)
         assertEquals(56, add.width); assertEquals(add.width, add.height)
-        assertTrue(month.height < scroll.height)
-        assertTrue(month.bottom + 48 <= scroll.height)
+        assertTrue("month=${month.height}, scroll=${scroll.height}, top=${month.top}, display=${root.resources.displayMetrics}", month.height < scroll.height)
+        assertTrue("monthBottom=${month.bottom}, scroll=${scroll.height}", month.bottom + 48 <= scroll.height)
         add.performClick()
         val intent = shadowOf(controller.get()).nextStartedActivity
         assertEquals(NoteEditorActivity::class.java.name, intent.component!!.className)
