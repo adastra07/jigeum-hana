@@ -193,4 +193,79 @@ class CalendarInteractionTest {
         controller.pause().stop().destroy()
     }
 
+    @Test fun datesShowUpToThreeEntriesAndEntryTapOpensDayBeforeEditor() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        val repo = NoteRepository(activity)
+        val first = YearMonth.now().atDay(15)
+        listOf(2, 3, 5).forEachIndexed { offset, count ->
+            repeat(count) { index -> repo.save(Note(id = "day-$offset-$index", title = "일정 $offset-$index",
+                schedule = NoteSchedule(first.plusDays(offset.toLong())), createdAt = index.toLong())) }
+        }
+        val root = activity.window.decorView
+        find(root) { it.tag == "nav:calendar" }!!.performClick(); measure(root)
+        val pager = find(root) { it is CalendarMonthView } as CalendarMonthView
+        val cells = (0..2).map { offset -> find(pager) { it.tag == first.plusDays(offset.toLong()) } as ViewGroup }
+        cells.forEachIndexed { index, cell ->
+            val labels = (0 until cell.childCount).map { cell.getChildAt(it) }.filterIsInstance<TextView>().filter { it.text.startsWith("일정 ") }
+            assertEquals(if(index == 0) 2 else 3, labels.size)
+            assertTrue(labels.last().bottom <= cell.height - cell.paddingBottom)
+            val more = find(cell) { it is TextView && it.text == "+2" }
+            if(index == 2) { assertNotNull(more); assertTrue(more!!.bottom <= cell.height - cell.paddingBottom) } else assertNull(more)
+        }
+        val fiveCell = cells[2]
+        find(fiveCell) { it is TextView && it.text == "일정 2-0" }!!.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(shadowOf(activity).nextStartedActivity)
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertNotNull(dialog); assertTrue(dialog.isShowing)
+        repeat(5) { index -> assertNotNull(find(dialog.window!!.decorView) { it is TextView && it.text == "일정 2-$index" }) }
+        val title = find(dialog.window!!.decorView) { it is TextView && it.text == "일정 2-4" }!!
+        (title.parent as View).performClick()
+        val editor = shadowOf(activity).nextStartedActivity
+        assertEquals(NoteEditorActivity::class.java.name, editor.component!!.className)
+        assertEquals("day-2-4", editor.getStringExtra("noteId"))
+        preview(root, "calendar-three-entries")
+        dialog.dismiss(); shadowOf(Looper.getMainLooper()).idle()
+        repo.close(); controller.pause().stop().destroy()
+    }
+    @Test fun dateCellsHaveOnlyOneDpGapsAndPagingResizesCrowdedWeeks() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get(); val repo = NoteRepository(activity)
+        val date = YearMonth.now().atDay(15)
+        repeat(5) { index -> repo.save(Note(title = "일정 $index", schedule = NoteSchedule(date))) }
+        val root = activity.window.decorView
+        find(root) { it.tag == "nav:calendar" }!!.performClick(); measure(root)
+        val pager = find(root) { it is CalendarMonthView } as CalendarMonthView
+        val cell = find(pager) { it.tag == date }!!
+        val row = cell.parent as ViewGroup
+        val grid = row.parent as ViewGroup
+        for(i in 0 until row.childCount - 1) assertEquals(1, row.getChildAt(i + 1).left - row.getChildAt(i).right)
+        for(i in 0 until grid.childCount - 1) assertEquals(1, grid.getChildAt(i + 1).top - grid.getChildAt(i).bottom)
+        val crowdedHeight = pager.height
+        val shown = pager.shownMonth
+        pager.showMonth(shown.plusMonths(1));shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));measure(root)
+        assertTrue("Only crowded weeks need extra height", pager.height < crowdedHeight)
+        pager.showMonth(shown);shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));measure(root)
+        assertEquals(crowdedHeight, pager.height)
+        repo.close(); controller.pause().stop().destroy()
+    }
+    @Test fun threeEntriesAndOverflowRemainVisibleAtLargestAppFont() {
+        Store(org.robolectric.RuntimeEnvironment.getApplication()).fontStep = 8
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get(); val repo = NoteRepository(activity)
+        val date = YearMonth.now().atDay(15)
+        repeat(4) { index -> repo.save(Note(title = "큰 글씨 $index", schedule = NoteSchedule(date))) }
+        val root = activity.window.decorView
+        find(root) { it.tag == "nav:calendar" }!!.performClick(); measure(root)
+        val pager = find(root) { it is CalendarMonthView }!!
+        val cell = find(pager) { it.tag == date } as ViewGroup
+        val labels = (0 until cell.childCount).map { cell.getChildAt(it) }.filterIsInstance<TextView>().filter { it.text.startsWith("큰 글씨 ") }
+        assertEquals(3,labels.size)
+        val more = find(cell) { it is TextView && it.text == "+1" }!!
+        assertTrue(more.bottom <= cell.height - cell.paddingBottom)
+        preview(root, "calendar-three-entries-large-font")
+        repo.close();controller.pause().stop().destroy()
+    }
+
 }
