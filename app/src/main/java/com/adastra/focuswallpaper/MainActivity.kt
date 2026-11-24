@@ -544,14 +544,22 @@ class MainActivity : Activity() {
         }
         section("백업", {
             AlertDialog.Builder(this).setTitle("백업")
-                .setMessage("할 일·목록·캘린더·분류·휴지통·설정과 스탑워치 기록을 DB 파일로 저장합니다. 저장 위치를 선택할 수 있습니다.")
+                .setMessage("할 일·목록·캘린더·분류·휴지통·설정과 스탑워치 기록을 DB 파일로 저장합니다. 저장 위치를 선택할 수 있습니다. 가져오기는 현재 데이터를 백업 파일의 내용으로 교체하며, 실행 중이던 타이머는 일시정지합니다.")
                 .setPositiveButton("닫기", null).show()
         }) { card ->
-            card.addView(flat("파일로 내보내기", soft, accent) {
-                if (BackupExporter.isBusy()) toast("백업 중입니다")
-                else try { startActivityForResult(BackupExporter.createDocumentIntent(), BackupExporter.REQUEST_CODE) }
-                catch (_: ActivityNotFoundException) { toast("파일 저장 화면을 열지 못했습니다") }
-            }.apply { contentDescription = "백업 파일로 내보내기" }, LinearLayout.LayoutParams(-1, dp(44)))
+            row(card).apply {
+                addView(flat("내보내기", soft, accent) {
+                    if (BackupExporter.isBusy() || BackupImporter.isBusy()) toast("백업 작업 중입니다")
+                    else try { startActivityForResult(BackupExporter.createDocumentIntent(), BackupExporter.REQUEST_CODE) }
+                    catch (_: ActivityNotFoundException) { toast("파일 저장 화면을 열지 못했습니다") }
+                }.apply { contentDescription = "백업 파일로 내보내기" }, LinearLayout.LayoutParams(0, dp(38), 1f))
+                addView(View(this@MainActivity).apply { setBackgroundColor(Color.rgb(220, 225, 221)) }, LinearLayout.LayoutParams(dp(1), dp(24)).apply { marginStart = dp(6); marginEnd = dp(6) })
+                addView(flat("가져오기", soft, accent) {
+                    if (BackupExporter.isBusy() || BackupImporter.isBusy()) toast("백업 작업 중입니다")
+                    else try { startActivityForResult(BackupImporter.openDocumentIntent(), BackupImporter.REQUEST_CODE) }
+                    catch (_: ActivityNotFoundException) { toast("파일 선택 화면을 열지 못했습니다") }
+                }.apply { contentDescription = "백업 파일 가져오기" }, LinearLayout.LayoutParams(0, dp(38), 1f))
+            }
         }
         page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
@@ -804,6 +812,9 @@ class MainActivity : Activity() {
     }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == BackupImporter.REQUEST_CODE && resultCode == RESULT_OK) {
+            data?.data?.let { BackupImporter.select(this, it) { recreate() } } ?: toast("선택한 파일을 확인하지 못했습니다")
+        }
         if (requestCode == BackupExporter.REQUEST_CODE && resultCode == RESULT_OK) {
             data?.data?.let { BackupExporter.export(this, it) } ?: toast("파일 저장 위치를 확인하지 못했습니다")
         }
