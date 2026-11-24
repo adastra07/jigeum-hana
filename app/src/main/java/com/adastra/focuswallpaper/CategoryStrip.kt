@@ -52,8 +52,10 @@ class CategoryStrip(
                 setOnLongClickListener { edit(id); true }
             }, LayoutParams(-2, -2).apply { marginEnd = ui.dp(4) })
         }
-        addView(ui.button("+") { add() }.apply {
+        val addButton = ui.squareButton("+") { add() }.apply {
+            tag = "$key:category-add"
             contentDescription = if (key == "tasks") "분류 추가" else "캘린더 분류 추가"
-        }, LayoutParams(ui.dp(40), ui.dp(40)))
+        }
+        addView(addButton, LayoutParams(addButton.minimumWidth, addButton.minimumHeight).apply { marginEnd = ui.dp(4) })
     }
 }

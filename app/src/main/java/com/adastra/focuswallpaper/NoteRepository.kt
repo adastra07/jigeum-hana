@@ -29,9 +29,11 @@ class NoteRepository(context: Context) : SQLiteOpenHelper(context.applicationCon
             put("id", category.id); put("name", category.name); put("color", category.color); put("position", position)
         }, SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
     }
-    fun moveCategory(id: String, direction: Int) {
-        val all = categories(); val index = all.indexOfFirst { it.id == id }; val target = index + direction
-        if (direction !in listOf(-1, 1) || index < 0 || target !in all.indices) return
+    fun moveCategory(id: String, direction: Int, hiddenIds: Set<String> = emptySet()) {
+        val all = categories(); val visible = all.filterNot { it.id in hiddenIds }
+        val visibleIndex = visible.indexOfFirst { it.id == id }; val neighbour = visibleIndex + direction
+        if (direction !in listOf(-1, 1) || visibleIndex < 0 || neighbour !in visible.indices) return
+        val index = all.indexOfFirst { it.id == id }; val target = all.indexOfFirst { it.id == visible[neighbour].id }
         val order = all.toMutableList().apply { val other = this[target]; this[target] = this[index]; this[index] = other }
         val db = writableDatabase; db.beginTransaction()
         try {

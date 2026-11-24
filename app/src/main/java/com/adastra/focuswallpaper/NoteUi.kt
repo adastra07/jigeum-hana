@@ -30,6 +30,14 @@ class NoteUi(val activity: Activity) {
         background = RippleDrawable(ColorStateList.valueOf(0x22245a48), shape(fill), shape(Color.WHITE))
         isClickable = true; isFocusable = true; setOnClickListener { action() }
     }
+    fun squareButton(value: String, size: Float = 22f, radius: Int = 8, action: () -> Unit) = button(value, soft, action).apply {
+        textSize = size; setPadding(0, 0, 0, 0)
+        val metrics = paint.fontMetricsInt
+        val side = maxOf(dp(36), metrics.bottom - metrics.top + dp(8), kotlin.math.ceil(paint.measureText(value)).toInt() + dp(12))
+        minimumWidth = side; minimumHeight = side
+        background = RippleDrawable(ColorStateList.valueOf(0x22245a48),
+            shape(soft, radius).apply { setStroke(dp(1), 0xffd2ddd5.toInt()) }, shape(Color.WHITE, radius))
+    }
     fun icon(res: Int, description: String, action: () -> Unit) = button("", action = action).apply {
         contentDescription = description
         setCompoundDrawablesWithIntrinsicBounds(activity.getDrawable(res)!!.mutate().apply { setTint(accent) }, null, null, null)

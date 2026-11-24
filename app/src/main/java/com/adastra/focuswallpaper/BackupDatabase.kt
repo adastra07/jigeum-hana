@@ -58,7 +58,9 @@ data class BackupSnapshot(
                 categories, frozenTasks, calendarCategories, entries,
                 mapOf("default_focus_mode" to store.defaultFocusMode, "font_step" to store.fontStep,
                     "last_minutes" to store.lastMinutes, "last_stopwatch" to store.lastStopwatch,
-                    "wallpaper_enabled" to store.wallpaperEnabled, "wallpaper_color_argb" to store.wallpaperColor),
+                    "wallpaper_enabled" to store.wallpaperEnabled, "wallpaper_color_argb" to store.wallpaperColor,
+                    "calendar_hide_uncategorized" to store.hideCalendarUncategorized,
+                    "completed_tasks_last" to store.completedTasksLast),
                 store.presets.toList(), mapOf(
                     "selected_task_id" to store.selected.takeIf { it in ids },
                     "selected_category_id" to store.category.takeIf { id -> categories.any { it.id == id } }.orEmpty().ifEmpty { DEFAULT_CATEGORY },
@@ -101,7 +103,7 @@ object BackupDatabase {
                 snapshot.taskCategories.forEachIndexed { i, c -> insert("task_categories", mapOf("id" to c.id, "name" to c.name, "position" to i)) }
                 snapshot.tasks.forEachIndexed { i, t -> insert("tasks", mapOf("id" to t.id, "title" to t.text, "category_id" to t.categoryId,
                     "position" to i, "completed" to t.done, "focus_mode" to (if (t.stopwatch) "stopwatch" else if (t.minutes == 0) "unassigned" else "timer"),
-                    "focus_minutes" to t.minutes, "stopwatch_elapsed_ms" to t.stopwatchMs, "deleted_at_epoch_ms" to t.deletedAt)) }
+                    "focus_minutes" to t.minutes, "stopwatch_elapsed_ms" to t.stopwatchMs, "deleted_at_epoch_ms" to t.deletedAt, "completed_at_epoch_ms" to t.completedAt)) }
                 snapshot.calendarCategories.forEachIndexed { i, c -> insert("calendar_categories", mapOf("id" to c.id, "name" to c.name, "color_argb" to c.color, "position" to i)) }
                 snapshot.entries.forEach { n ->
                     val s = requireNotNull(n.schedule)

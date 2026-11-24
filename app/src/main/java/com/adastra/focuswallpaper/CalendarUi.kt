@@ -15,6 +15,7 @@ import java.time.YearMonth
 
 class CalendarUi(private val activity: Activity, private val repo: NoteRepository, private val redraw: () -> Unit) {
     private val ui = NoteUi(activity)
+    private val store = Store(activity)
     var month: YearMonth = YearMonth.now()
     var selectedDate: LocalDate = LocalDate.now()
     var filter = ""
@@ -64,7 +65,7 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
         parent.addView(card)
         lateinit var monthLabel: TextView
         ui.row(card).apply {
-            tag = "calendar:header"; minimumHeight = headerHeight
+            tag = "calendar:header"; minimumHeight = headerHeight; setPadding(ui.dp(4), 0, ui.dp(10), 0)
             val left = ui.row(this).apply { tag = "calendar:month-controls" }
             left.layoutParams = LinearLayout.LayoutParams(0, -2, 3f)
             left.addView(ui.button("‹") { monthPager?.showMonth(month.minusMonths(1)) }.apply { contentDescription = "이전 달" }, LinearLayout.LayoutParams(ui.dp(36), -2))
@@ -78,12 +79,14 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
             left.addView(monthLabel, LinearLayout.LayoutParams(0, -2, 1f))
             left.addView(ui.button("›") { monthPager?.showMonth(month.plusMonths(1)) }.apply { contentDescription = "다음 달" }, LinearLayout.LayoutParams(ui.dp(36), -2))
             addView(Space(activity), LinearLayout.LayoutParams(0, 1, 1f))
-            addView(ui.button("오늘") { selectedDate = LocalDate.now(); monthPager?.showMonth(YearMonth.now()) }.apply {
-                textSize = 12f; setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4))
-            }, LinearLayout.LayoutParams(ui.dp(40), -2))
+            val today = ui.squareButton("오늘", 12f, 3) {
+                selectedDate = LocalDate.now(); monthPager?.showMonth(YearMonth.now())
+            }.apply { tag = "calendar:today"; contentDescription = "오늘로 이동" }
+            addView(today, LinearLayout.LayoutParams(today.minimumWidth, today.minimumHeight))
             addView(ui.icon(R.drawable.ic_search, "캘린더 메모 검색") { search() }.apply {
-                setPadding(ui.dp(7), ui.dp(7), ui.dp(7), ui.dp(7))
-            }, LinearLayout.LayoutParams(ui.dp(38), -2))
+                tag = "calendar:search"; minimumHeight = today.minimumHeight
+                setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
+            }, LinearLayout.LayoutParams(today.minimumWidth, today.minimumHeight).apply { marginStart = ui.dp(8) })
         }
         card.addView(Space(activity), LinearLayout.LayoutParams(1, ui.dp(12)))
         ui.row(card).apply {
@@ -144,8 +147,10 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
         monthPager = pager
         card.addView(pager, LinearLayout.LayoutParams(-1, -2))
     }
+    private fun visibleCategories() = repo.categories().filterNot { store.hideCalendarUncategorized && it.id == NOTE_UNCATEGORIZED }
     private fun categoryBar(parent: LinearLayout, key: String = "calendar-day", changed: () -> Unit) {
-        val categories = repo.categories()
+        val categories = visibleCategories()
+        if (filter.isNotEmpty() && categories.none { it.id == filter }) filter = ""
         val all = listOf(NoteCategory("", "모두", 0)) + categories
         parent.addView(CategoryStrip(activity, key, all.map { it.id to it.name }, filter,
             categoryOffsets[key] ?: 0, { categoryOffsets[key] = it },
@@ -156,8 +161,8 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
     private fun categoryMenu(category: NoteCategory, changed: () -> Unit) {
         val body = ui.column().apply { setPadding(ui.dp(16), ui.dp(4), ui.dp(16), ui.dp(4)) }
         body.addView(ui.text("분류 순서", 13f, ui.muted).apply { setPadding(0, 0, 0, 0) })
-        body.addView(CategoryOrderControls(activity, category.id, "분류", { repo.categories().map { it.id to it.name } }) { direction ->
-            repo.moveCategory(category.id, direction); changed()
+        body.addView(CategoryOrderControls(activity, category.id, "분류", { visibleCategories().map { it.id to it.name } }) { direction ->
+            repo.moveCategory(category.id, direction, if (store.hideCalendarUncategorized) setOf(NOTE_UNCATEGORIZED) else emptySet()); changed()
         })
         body.addView(Space(activity), LinearLayout.LayoutParams(1, ui.dp(8)))
         val rename = ui.button("이름·색상 변경") {}.apply {

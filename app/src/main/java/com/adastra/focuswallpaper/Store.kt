@@ -11,7 +11,7 @@ data class Task(
     val id: String = UUID.randomUUID().toString(), var text: String,
     var done: Boolean = false, var minutes: Int = 25,
     val categoryId: String = DEFAULT_CATEGORY, val deletedAt: Long = 0,
-    val stopwatch: Boolean = false, val stopwatchMs: Long = 0
+    val stopwatch: Boolean = false, val stopwatchMs: Long = 0, val completedAt: Long = 0
 ) {
     val hasTimer: Boolean get() = !stopwatch && minutes > 0
     val hasClock: Boolean get() = stopwatch || hasTimer
@@ -29,12 +29,12 @@ object TaskCodec {
             val id = o.optString("id")
             if (id.isEmpty()) null else Task(id, o.optString("text"), o.optBoolean("done"),
                 o.optInt("minutes", 25).coerceIn(0, 180), o.optString("categoryId", DEFAULT_CATEGORY), o.optLong("deletedAt", 0),
-                o.optBoolean("stopwatch", false), o.optLong("stopwatchMs", 0).coerceAtLeast(0))
+                o.optBoolean("stopwatch", false), o.optLong("stopwatchMs", 0).coerceAtLeast(0), o.optLong("completedAt", 0).coerceAtLeast(0))
         }.toMutableList()
     }
     fun encode(tasks: List<Task>): String = JSONArray().apply {
         tasks.forEach { put(JSONObject().put("id", it.id).put("text", it.text).put("done", it.done)
-            .put("minutes", it.minutes).put("categoryId", it.categoryId).put("deletedAt", it.deletedAt).put("stopwatch", it.stopwatch).put("stopwatchMs", it.stopwatchMs)) }
+            .put("minutes", it.minutes).put("categoryId", it.categoryId).put("deletedAt", it.deletedAt).put("stopwatch", it.stopwatch).put("stopwatchMs", it.stopwatchMs).put("completedAt", it.completedAt)) }
     }.toString()
 }
 class Store(context: Context) {
@@ -71,6 +71,12 @@ class Store(context: Context) {
     var lastMinutes: Int
         get() = prefs.getInt("lastMinutes", presets[1]).coerceIn(0, 180)
         set(value) { require(value in 0..180); prefs.edit().putInt("lastMinutes", value).commit() }
+    var completedTasksLast: Boolean
+        get() = prefs.getBoolean("completedTasksLast", true)
+        set(value) { prefs.edit().putBoolean("completedTasksLast", value).commit() }
+    var hideCalendarUncategorized: Boolean
+        get() = prefs.getBoolean("hideCalendarUncategorized", false)
+        set(value) { prefs.edit().putBoolean("hideCalendarUncategorized", value).commit() }
     var wallpaperEnabled: Boolean
         get() = prefs.getBoolean("wallpaperEnabled", true)
         set(value) { prefs.edit().putBoolean("wallpaperEnabled", value).commit() }
