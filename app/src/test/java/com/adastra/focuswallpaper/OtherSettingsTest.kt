@@ -6,6 +6,7 @@ import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import org.junit.Assert.*
@@ -35,6 +36,13 @@ class OtherSettingsTest {
         repeat(3) {view.measure(View.MeasureSpec.makeMeasureSpec(360,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(740,View.MeasureSpec.EXACTLY));view.layout(0,0,360,740);flush()}
     }
     private fun preview(view: View, name: String) {
+        val scroll=find(view) { it is ScrollView } as ScrollView
+        scroll.scrollTo(0,(scroll.getChildAt(0).height-scroll.height).coerceAtLeast(0));flush()
+        val box=tagged(view,"settings:other-box")
+        val boxPosition=IntArray(2).also { box.getLocationOnScreen(it) }
+        val viewport=IntArray(2).also { scroll.getLocationOnScreen(it) }
+        assertTrue("Other settings header is reachable",boxPosition[1] >= viewport[1])
+        assertTrue("Other settings box is fully visible after scrolling",boxPosition[1]+box.height <= viewport[1]+scroll.height)
         val bitmap=android.graphics.Bitmap.createBitmap(360,740,android.graphics.Bitmap.Config.ARGB_8888)
         view.draw(android.graphics.Canvas(bitmap))
         val file=File("build/reports/ui/$name.png");file.parentFile!!.mkdirs();file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
