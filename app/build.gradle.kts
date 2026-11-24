@@ -16,7 +16,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2") }
+        unitTests.all { it.systemProperty("robolectric.dependency.repo.url", "https://maven-central.storage-download.googleapis.com/maven2/") }
     }
 }
 dependencies { implementation("androidx.viewpager2:viewpager2:1.1.0"); testImplementation("junit:junit:4.13.2"); testImplementation("org.json:json:20240303"); testImplementation("org.robolectric:robolectric:4.14.1") }
