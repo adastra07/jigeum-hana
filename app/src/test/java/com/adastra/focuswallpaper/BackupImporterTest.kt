@@ -142,6 +142,7 @@ class BackupImporterTest {
         }
         val dialog=ShadowAlertDialog.getLatestAlertDialog();assertNotNull(dialog);assertTrue(dialog.isShowing)
         dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
         assertFalse(BackupImporter.isBusy());assertEquals(before,context.getSharedPreferences("focus",0).all)
         SQLiteDatabase.deleteDatabase(file);controller.pause().stop().destroy()
     }
