@@ -110,6 +110,7 @@ class OtherSettingsTest {
     @Test fun backupRestoresNewOptionAndLegacyBackupsDefaultToShowingUncategorized() {
         val controller=Robolectric.buildActivity(MainActivity::class.java).setup();val context=controller.get();val store=Store(context)
         store.hideCalendarUncategorized=true;store.completedTasksLast=false
+        store.checklistStartMode=StartupSelection.FIRST;store.calendarStartMode=StartupSelection.LAST;store.lastCalendarCategory=NOTE_UNCATEGORIZED
         val tasks=listOf(Task("a","A"),Task("b","B",done=true,completedAt=123),Task("c","C"))
         store.saveTasks(tasks)
         val file=File.createTempFile("misc-backup-",".db",context.cacheDir)
@@ -119,6 +120,7 @@ class OtherSettingsTest {
         store.hideCalendarUncategorized=false;store.completedTasksLast=true;store.saveTasks(emptyList())
         BackupImporter.restore(context,snapshot);assertTrue(store.hideCalendarUncategorized)
         assertFalse(store.completedTasksLast);assertEquals(tasks,store.tasks())
+        assertEquals(StartupSelection.FIRST,store.checklistStartMode);assertEquals(StartupSelection.LAST,store.calendarStartMode);assertEquals(NOTE_UNCATEGORIZED,store.lastCalendarCategory)
         assertEquals(listOf("a","b","c"),TaskOrder.visible(store.tasks(),DEFAULT_CATEGORY,store.completedTasksLast).map { it.id })
         val db=SQLiteDatabase.openDatabase(file.path,null,SQLiteDatabase.OPEN_READWRITE)
         db.execSQL("ALTER TABLE app_settings RENAME TO extended_settings")
@@ -126,6 +128,7 @@ class OtherSettingsTest {
         db.execSQL("DROP TABLE extended_settings");db.close()
         val legacy=BackupImporter.read(context,file);assertEquals(false,legacy.settings["calendar_hide_uncategorized"])
         BackupImporter.restore(context,legacy);assertFalse(store.hideCalendarUncategorized);assertTrue(store.completedTasksLast)
+        assertEquals(StartupSelection.LAST,store.checklistStartMode);assertEquals(StartupSelection.FIRST,store.calendarStartMode);assertEquals("",store.lastCalendarCategory)
         SQLiteDatabase.deleteDatabase(file);controller.pause().stop().destroy()
     }
 }

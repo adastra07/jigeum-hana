@@ -53,3 +53,5 @@ v1.26은 백업 생성과 내보내기만 제공하며, 앱에서의 가져오�
 형식 1의 `app_settings`에는 선택적 확장 열 `calendar_hide_uncategorized`(정수 0/1, 기본 0)를 추가한다. 기존 필수 열·ID·버전과 연결은 바꾸지 않는다. 새 앱은 이 열이 없는 이전 백업을 0(미분류 탭 표시)으로 읽는다. 이전 앱은 추가 열을 무시하여 기존 데이터를 그대로 읽을 수 있다. 새로 내보낸 백업에는 숨김 설정도 저장된다.
 
 완료 항목 표시 설정 `app_settings.completed_tasks_last`(0/1, 기본 1), 완료 순서용 `tasks.completed_at_epoch_ms`(0 이상 정수, 기본 0)도 선택적 확장 열이다. 저장된 tasks.position은 체크 해제 시 복귀할 기준 순서이며, 완료 순서는 추가 열로 분리한다. 이전 백업에서 없는 열은 각각 1과 0으로 읽는다.
+
+v1.31의 선택적 열: `app_settings.checklist_start_mode`(default/first/last, 기본 last), `calendar_start_mode`(같은 값, 기본 first), `last_calendar_category_id`(기본 빈 문자열=모두). 기존 백업에서 누락되면 위 기본값을 사용한다.

@@ -19,6 +19,7 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
     var month: YearMonth = YearMonth.now()
     var selectedDate: LocalDate = LocalDate.now()
     var filter = ""
+        set(value) { field = value; store.lastCalendarCategory = value }
     private var dayDialog: AlertDialog? = null
     private var monthPager: CalendarMonthView? = null
     private val categoryOffsets = mutableMapOf<String, Int>()

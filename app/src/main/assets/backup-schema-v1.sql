@@ -46,7 +46,10 @@ CREATE TABLE app_settings (
  wallpaper_enabled INTEGER NOT NULL CHECK(wallpaper_enabled IN (0,1)),
  wallpaper_color_argb INTEGER NOT NULL,
  calendar_hide_uncategorized INTEGER NOT NULL DEFAULT 0 CHECK(calendar_hide_uncategorized IN (0,1)),
- completed_tasks_last INTEGER NOT NULL DEFAULT 1 CHECK(completed_tasks_last IN (0,1))
+ completed_tasks_last INTEGER NOT NULL DEFAULT 1 CHECK(completed_tasks_last IN (0,1)),
+ checklist_start_mode TEXT NOT NULL DEFAULT 'last' CHECK(checklist_start_mode IN ('default','first','last')),
+ calendar_start_mode TEXT NOT NULL DEFAULT 'first' CHECK(calendar_start_mode IN ('default','first','last')),
+ last_calendar_category_id TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE focus_presets (
  position INTEGER PRIMARY KEY CHECK(position BETWEEN 0 AND 2),
