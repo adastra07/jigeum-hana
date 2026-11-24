@@ -110,7 +110,10 @@ object BackupImporter {
                 mapOf<String, Any>("default_focus_mode" to c.text("default_focus_mode"), "font_step" to c.int("font_step"), "last_minutes" to c.int("last_minutes"),
                     "last_stopwatch" to c.bool("last_stopwatch"), "wallpaper_enabled" to c.bool("wallpaper_enabled"), "wallpaper_color_argb" to c.int("wallpaper_color_argb"),
                     "calendar_hide_uncategorized" to if (c.getColumnIndex("calendar_hide_uncategorized") >= 0) c.bool("calendar_hide_uncategorized") else false,
-                    "completed_tasks_last" to if (c.getColumnIndex("completed_tasks_last") >= 0) c.bool("completed_tasks_last") else true)
+                    "completed_tasks_last" to if (c.getColumnIndex("completed_tasks_last") >= 0) c.bool("completed_tasks_last") else true,
+                    "checklist_start_mode" to if (c.getColumnIndex("checklist_start_mode") >= 0) c.text("checklist_start_mode") else StartupSelection.LAST,
+                    "calendar_start_mode" to if (c.getColumnIndex("calendar_start_mode") >= 0) c.text("calendar_start_mode") else StartupSelection.FIRST,
+                    "last_calendar_category_id" to if (c.getColumnIndex("last_calendar_category_id") >= 0) c.text("last_calendar_category_id") else "")
             }.single()
             val presets = rows("focus_presets", "position") { c -> c.int("position") to c.int("minutes") }
             require(presets.map { it.first } == listOf(0, 1, 2))
@@ -174,6 +177,9 @@ object BackupImporter {
                     .putBoolean("wallpaperEnabled", s["wallpaper_enabled"] as Boolean).putInt("wallpaperColor", s["wallpaper_color_argb"] as Int)
                     .putBoolean("hideCalendarUncategorized", s["calendar_hide_uncategorized"] as? Boolean ?: false)
                     .putBoolean("completedTasksLast", s["completed_tasks_last"] as? Boolean ?: true)
+                    .putString("checklistStartMode", s["checklist_start_mode"] as? String ?: StartupSelection.LAST)
+                    .putString("calendarStartMode", s["calendar_start_mode"] as? String ?: StartupSelection.FIRST)
+                    .putString("lastCalendarCategory", s["last_calendar_category_id"] as? String ?: "")
                 // A durable undo record covers process death between the two storage commits.
                 writeUndo(context, previous)
                 preferencesWritten = true

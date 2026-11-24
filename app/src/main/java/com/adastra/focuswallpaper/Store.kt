@@ -71,6 +71,15 @@ class Store(context: Context) {
     var lastMinutes: Int
         get() = prefs.getInt("lastMinutes", presets[1]).coerceIn(0, 180)
         set(value) { require(value in 0..180); prefs.edit().putInt("lastMinutes", value).commit() }
+    var checklistStartMode: String
+        get() = prefs.getString("checklistStartMode", StartupSelection.LAST)?.takeIf { it in StartupSelection.modes } ?: StartupSelection.LAST
+        set(value) { require(value in StartupSelection.modes); prefs.edit().putString("checklistStartMode", value).commit() }
+    var calendarStartMode: String
+        get() = prefs.getString("calendarStartMode", StartupSelection.FIRST)?.takeIf { it in StartupSelection.modes } ?: StartupSelection.FIRST
+        set(value) { require(value in StartupSelection.modes); prefs.edit().putString("calendarStartMode", value).commit() }
+    var lastCalendarCategory: String
+        get() = prefs.getString("lastCalendarCategory", "").orEmpty()
+        set(value) { if (lastCalendarCategory != value) prefs.edit().putString("lastCalendarCategory", value).commit() }
     var completedTasksLast: Boolean
         get() = prefs.getBoolean("completedTasksLast", true)
         set(value) { prefs.edit().putBoolean("completedTasksLast", value).commit() }

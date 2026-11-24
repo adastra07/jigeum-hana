@@ -74,7 +74,14 @@ class MainActivity : Activity() {
         calendarUi = CalendarUi(this, noteRepository) { if (!isDestroyed) renderPage() }
         savedInstanceState?.getString("calendarMonth")?.let { calendarUi.month = java.time.YearMonth.parse(it) }
         savedInstanceState?.getString("calendarDate")?.let { calendarUi.selectedDate = java.time.LocalDate.parse(it) }
-        calendarUi.filter = savedInstanceState?.getString("calendarFilter").orEmpty()
+        val firstInProcess = (application as? JigeumApplication)?.consumeFirstMainActivity() ?: (savedInstanceState == null)
+        val newSession = firstInProcess || savedInstanceState == null
+        if (newSession) {
+            store.category = StartupSelection.resolve(store.checklistStartMode, DEFAULT_CATEGORY, store.categories().map { it.id }, store.category)
+            val calendarIds = listOf("") + noteRepository.categories()
+                .filterNot { store.hideCalendarUncategorized && it.id == NOTE_UNCATEGORIZED }.map { it.id }
+            calendarUi.filter = StartupSelection.resolve(store.calendarStartMode, NOTE_UNCATEGORIZED, calendarIds, store.lastCalendarCategory)
+        } else calendarUi.filter = savedInstanceState?.getString("calendarFilter") ?: store.lastCalendarCategory
         trashKind = savedInstanceState?.getString("trashKind") ?: "tasks"
         screen = savedInstanceState?.getString("screen") ?: "tasks"
         otherSettingsExpanded = savedInstanceState?.getBoolean("otherSettingsExpanded") ?: false
@@ -590,6 +597,8 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, checked -> store.hideCalendarUncategorized = checked }
         }, LinearLayout.LayoutParams(-1, -2))
         details.addView(text("미분류 일정은 ‘모두’에서 볼 수 있습니다.", 11f, muted).apply { setPadding(dp(12), 0, dp(12), dp(6)) })
+        startupSelectionSettings(details, "체크리스트 시작 목록", "checklist", store.checklistStartMode) { store.checklistStartMode = it }
+        startupSelectionSettings(details, "캘린더 시작 분류", "calendar", store.calendarStartMode) { store.calendarStartMode = it }
         row(details).apply {
             addView(text("알림", 13f, muted).apply { setPadding(dp(12), 0, 0, 0) }, LinearLayout.LayoutParams(0, -2, 1f))
             addView(flat("") { settingsInfo("notifications") }.apply {
@@ -605,6 +614,29 @@ class MainActivity : Activity() {
             if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
         }
         updateExpanded()
+    }
+    private fun startupSelectionSettings(parent: LinearLayout, title: String, key: String, selectedMode: String, save: (String) -> Unit) {
+        gap(parent, 8)
+        parent.addView(text(title, 13f, muted).apply { setPadding(dp(12), 0, dp(12), dp(4)) })
+        val choices = row(parent)
+        val buttons = mutableListOf<Pair<String, TextView>>()
+        listOf(StartupSelection.DEFAULT to "기본", StartupSelection.FIRST to "맨 왼쪽", StartupSelection.LAST to "이전 선택").forEachIndexed { index, (mode, label) ->
+            val button = flat(label) {}.apply {
+                tag = "settings:$key-start:$mode"; textSize = 13f; minimumHeight = dp(36)
+                setPadding(dp(4), dp(4), dp(4), dp(4)); isSelected = mode == selectedMode
+                background = ripple(if (isSelected) soft else Color.TRANSPARENT)
+                setTextColor(if (isSelected) accent else muted); contentDescription = "$title, $label"
+            }
+            buttons.add(mode to button)
+            button.setOnClickListener {
+                save(mode)
+                buttons.forEach { (id, view) ->
+                    view.isSelected = id == mode; view.background = ripple(if (view.isSelected) soft else Color.TRANSPARENT)
+                    view.setTextColor(if (view.isSelected) accent else muted)
+                }
+            }
+            choices.addView(button, LinearLayout.LayoutParams(0, -2, 1f).apply { if (index < 2) marginEnd = dp(4) })
+        }
     }
     private fun categoryOrderControls(parent: LinearLayout, categoryId: String) {
         parent.addView(CategoryOrderControls(this, categoryId, "목록", { store.categories().map { it.id to it.name } }) { direction ->
@@ -819,7 +851,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == BackupImporter.REQUEST_CODE && resultCode == RESULT_OK) {
-            data?.data?.let { BackupImporter.select(this, it) { recreate() } } ?: toast("선택한 파일을 확인하지 못했습니다")
+            data?.data?.let { BackupImporter.select(this, it) { calendarUi.filter = store.lastCalendarCategory; recreate() } } ?: toast("선택한 파일을 확인하지 못했습니다")
         }
         if (requestCode == BackupExporter.REQUEST_CODE && resultCode == RESULT_OK) {
             data?.data?.let { BackupExporter.export(this, it) } ?: toast("파일 저장 위치를 확인하지 못했습니다")

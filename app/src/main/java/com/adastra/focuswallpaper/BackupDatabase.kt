@@ -60,7 +60,9 @@ data class BackupSnapshot(
                     "last_minutes" to store.lastMinutes, "last_stopwatch" to store.lastStopwatch,
                     "wallpaper_enabled" to store.wallpaperEnabled, "wallpaper_color_argb" to store.wallpaperColor,
                     "calendar_hide_uncategorized" to store.hideCalendarUncategorized,
-                    "completed_tasks_last" to store.completedTasksLast),
+                    "completed_tasks_last" to store.completedTasksLast,
+                    "checklist_start_mode" to store.checklistStartMode, "calendar_start_mode" to store.calendarStartMode,
+                    "last_calendar_category_id" to store.lastCalendarCategory.takeIf { id -> calendarCategories.any { it.id == id } }.orEmpty()),
                 store.presets.toList(), mapOf(
                     "selected_task_id" to store.selected.takeIf { it in ids },
                     "selected_category_id" to store.category.takeIf { id -> categories.any { it.id == id } }.orEmpty().ifEmpty { DEFAULT_CATEGORY },
