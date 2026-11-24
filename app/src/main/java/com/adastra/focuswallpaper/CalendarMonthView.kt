@@ -18,7 +18,7 @@ object CalendarLayout {
 class CalendarMonthView(
     context: Context,
     private val origin: YearMonth,
-    private val pageHeight: Int,
+    private var pageHeight: Int,
     createPage: (YearMonth) -> View,
     private val selected: (YearMonth) -> Unit,
     private val settled: () -> Unit
@@ -53,6 +53,11 @@ class CalendarMonthView(
         if (position !in 0..centre * 2) return
         if (position == pager.currentItem) { selected(month); settled() }
         else pager.setCurrentItem(position, true)
+    }
+    fun setPageHeight(height: Int) {
+        if (pageHeight == height) return
+        pageHeight = height
+        requestLayout()
     }
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(pageHeight, MeasureSpec.EXACTLY))

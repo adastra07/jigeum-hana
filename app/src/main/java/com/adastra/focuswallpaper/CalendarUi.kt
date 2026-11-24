@@ -45,12 +45,21 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
         val dayHeight = maxOf(ui.dp(22), textHeight(12f) + ui.dp(6))
         val labelHeight = maxOf(ui.dp(14), textHeight(10f))
         val moreHeight = maxOf(ui.dp(12), textHeight(9f))
-        val cellHeight = maxOf(ui.dp(CalendarLayout.rowHeight(viewportDp)), dayHeight + ui.dp(5) + labelHeight + ui.dp(2) + moreHeight)
-        val capacity = ((cellHeight - dayHeight - ui.dp(5) - moreHeight) / (labelHeight + ui.dp(2))).coerceIn(1, 3)
+        val capacity = 3
+        val dateGap = ui.dp(1).coerceAtLeast(1)
         val headerHeight = maxOf(ui.dp(40), textHeight(19f) + ui.dp(8))
         val weekdayHeight = maxOf(ui.dp(24), textHeight(12f) + ui.dp(6))
         val notes = repo.notes()
         val categories = repo.categories().associateBy { it.id }
+        val entryCache = mutableMapOf<LocalDate, List<Note>>()
+        fun entriesOn(date: LocalDate) = entryCache.getOrPut(date) { CalendarDates.entries(notes, date, filter) }
+        fun weekHeight(week: List<LocalDate>): Int {
+            val count = week.maxOf { entriesOn(it).size }
+            val labels = minOf(count, capacity)
+            return maxOf(ui.dp(CalendarLayout.rowHeight(viewportDp)),
+                dayHeight + ui.dp(5) + labels * (labelHeight + ui.dp(2)) + if (count > capacity) moreHeight else 0)
+        }
+        fun monthHeight(displayMonth: YearMonth) = CalendarDates.cells(displayMonth).chunked(7).sumOf { weekHeight(it) } + dateGap * 5
         val card = ui.column().apply { tag = "calendar:main-card"; background = ui.shape(Color.WHITE, 10) }
         parent.addView(card)
         lateinit var monthLabel: TextView
@@ -85,9 +94,11 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
         }
         fun createMonth(displayMonth: YearMonth): View {
             val grid = ui.column()
-            CalendarDates.cells(displayMonth).chunked(7).forEach { week ->
+            CalendarDates.cells(displayMonth).chunked(7).forEachIndexed { weekIndex, week ->
+                val cellHeight = weekHeight(week)
                 val line = ui.row(grid).apply { gravity = Gravity.TOP }
-                week.forEach { date ->
+                line.layoutParams = LinearLayout.LayoutParams(-1, cellHeight).apply { if (weekIndex < 5) bottomMargin = dateGap }
+                week.forEachIndexed { dayIndex, date ->
                     val currentMonth = YearMonth.from(date) == displayMonth
                     val cell = ui.column().apply {
                         tag = date; setPadding(ui.dp(1), ui.dp(2), ui.dp(1), ui.dp(3))
@@ -105,7 +116,7 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
                     }
                     val dayWidth = maxOf(ui.dp(24), day.paint.measureText("30").toInt() + ui.dp(8))
                     cell.addView(day, LinearLayout.LayoutParams(dayWidth, dayHeight).apply { gravity = Gravity.CENTER_HORIZONTAL })
-                    val entries = CalendarDates.entries(notes, date, filter)
+                    val entries = entriesOn(date)
                     entries.take(capacity).forEach { note ->
                         val category = categories[note.categoryId] ?: categories.getValue(NOTE_UNCATEGORIZED)
                         val label = ui.text(note.displayTitle, 10f).apply {
@@ -113,18 +124,23 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
                             background = ui.shape(category.color, 2); minimumHeight = labelHeight
                             alpha = if (currentMonth) 1f else .65f
                             contentDescription = "${note.displayTitle}, ${ui.scheduleLabel(note.schedule!!)}, ${category.name}"
-                            isClickable = true; isFocusable = true; setOnClickListener { open(note, date) }
+                            isClickable = true; isFocusable = true
+                            setOnClickListener { selectedDate = date; updateSelection(); showDay(date) }
                         }
                         cell.addView(label, LinearLayout.LayoutParams(-1, labelHeight).apply { bottomMargin = ui.dp(2) })
                     }
                     if (entries.size > capacity) cell.addView(ui.text("+${entries.size - capacity}", 9f, ui.muted).apply { setPadding(ui.dp(2), 0, 0, 0) }, LinearLayout.LayoutParams(-1, moreHeight))
-                    line.addView(cell, LinearLayout.LayoutParams(0, cellHeight, 1f))
+                    line.addView(cell, LinearLayout.LayoutParams(0, cellHeight, 1f).apply { if (dayIndex < 6) marginEnd = dateGap })
                 }
             }
             return grid
         }
-        val pager = CalendarMonthView(activity, month, cellHeight * 6,
-            { createMonth(it) }, { shown -> month = shown; selectedDate = CalendarLayout.dateInMonth(selectedDate, shown); monthLabel.text = "${shown.year}. ${shown.monthValue}" }, { updateSelection() })
+        val pager = CalendarMonthView(activity, month, monthHeight(month),
+            { createMonth(it) }, { shown ->
+                month = shown; selectedDate = CalendarLayout.dateInMonth(selectedDate, shown)
+                monthLabel.text = "${shown.year}. ${shown.monthValue}"
+                monthPager?.setPageHeight(monthHeight(shown))
+            }, { updateSelection() })
         monthPager = pager
         card.addView(pager, LinearLayout.LayoutParams(-1, -2))
     }
