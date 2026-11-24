@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private var calendarViewport = -1
     private var calendarResizePosted = false
     private var screen = "tasks"
+    private var otherSettingsExpanded = false
     private var renderedSelection: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private var wallpaperBusy = false
@@ -76,6 +77,7 @@ class MainActivity : Activity() {
         calendarUi.filter = savedInstanceState?.getString("calendarFilter").orEmpty()
         trashKind = savedInstanceState?.getString("trashKind") ?: "tasks"
         screen = savedInstanceState?.getString("screen") ?: "tasks"
+        otherSettingsExpanded = savedInstanceState?.getBoolean("otherSettingsExpanded") ?: false
         if (store.categories().none { it.id == store.category }) store.category = DEFAULT_CATEGORY
         if (active() && store.timer.taskId.isEmpty()) {
             val id = store.tasks().firstOrNull { it.deletedAt == 0L && it.text == store.timer.title }?.id ?: store.selected
@@ -227,11 +229,11 @@ class MainActivity : Activity() {
             { editCategory(null) }))
         gap(page, 8)
         val card = card(page).apply { tag = "tasks:main-card" }
-        val tasks = store.tasks().filter { it.deletedAt == 0L && it.categoryId == store.category }
+        val tasks = TaskOrder.visible(store.tasks(), store.category, store.completedTasksLast)
         if (tasks.isEmpty()) card.addView(text("할 일을 추가해 주세요", 14f, muted).apply { setPadding(dp(10), dp(14), dp(10), dp(14)) })
         val categoryId = store.category
-        val reorder = TaskDragReorder(card, pageScroll) { ids ->
-            store.saveTasks(TaskOrder.reorder(store.tasks(), categoryId, ids))
+        val reorder = TaskDragReorder(card, pageScroll, settled = { if (store.completedTasksLast) renderPage() }) { ids ->
+            store.saveTasks(TaskOrder.reorder(store.tasks(), categoryId, ids, store.completedTasksLast))
         }
         tasks.forEach { task -> taskRow(card, task, reorder) }
         gap(page, 12)
@@ -266,8 +268,8 @@ class MainActivity : Activity() {
             textSize = 23f; setPadding(0, 0, 0, 0); contentDescription = "${task.text} 휴지통으로 이동"
         }, LinearLayout.LayoutParams(dp(40), dp(48)))
         check.setOnCheckedChangeListener { _, checked ->
-            val tasks = store.tasks(); tasks.firstOrNull { it.id == task.id }?.done = checked
-            store.saveTasks(tasks); renderPage()
+            store.saveTasks(TaskOrder.setCompleted(store.tasks(), task.id, checked, System.currentTimeMillis()))
+            renderPage()
         }
     }
     private fun renderTrash() {
@@ -534,14 +536,6 @@ class MainActivity : Activity() {
             }
         }
         wallpaperSettings()
-        section("알림", { settingsInfo("notifications") }) { card ->
-            settingRow(card, "앱 알림", if (TimerEngine.notificationsAllowed(this)) "허용됨" else "차단됨") {
-                openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
-            }
-            settingRow(card, "정확한 완료 알람", if (TimerEngine.exactAllowed(this)) "허용됨" else "허용 필요") {
-                if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
-            }
-        }
         section("백업", {
             AlertDialog.Builder(this).setTitle("백업")
                 .setMessage("할 일·목록·캘린더·분류·휴지통·설정과 스탑워치 기록을 DB 파일로 저장합니다. 저장 위치를 선택할 수 있습니다. 가져오기는 현재 데이터를 백업 파일의 내용으로 교체하며, 실행 중이던 타이머는 일시정지합니다.")
@@ -561,7 +555,56 @@ class MainActivity : Activity() {
                 }.apply { contentDescription = "백업 파일 가져오기" }, LinearLayout.LayoutParams(0, dp(38), 1f))
             }
         }
+        otherSettings()
         page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
+    }
+    private fun otherSettings() {
+        gap(page, 8)
+        val box = card(page).apply { tag = "settings:other-box"; setPadding(dp(10), dp(6), dp(10), dp(6)) }
+        val header = flat("") {}.apply {
+            tag = "settings:other-toggle"; gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            minimumHeight = dp(38); setTextColor(ink)
+        }
+        box.addView(header, LinearLayout.LayoutParams(-1, -2))
+        val details = column().apply { tag = "settings:other-content"; setPadding(0, dp(4), 0, dp(2)) }
+        box.addView(details)
+        fun updateExpanded() {
+            details.visibility = if (otherSettingsExpanded) View.VISIBLE else View.GONE
+            header.text = "기타 설정  ${if (otherSettingsExpanded) "▴" else "▾"}"
+            header.contentDescription = "기타 설정 ${if (otherSettingsExpanded) "접기" else "펼치기"}"
+            header.stateDescriptionCompat(if (otherSettingsExpanded) "펼쳐짐" else "접힘")
+        }
+        header.setOnClickListener { otherSettingsExpanded = !otherSettingsExpanded; updateExpanded() }
+        details.addView(Switch(this).apply {
+            tag = "settings:completed-last"; text = "완료한 할 일 아래로"; textSize = 14f; setTextColor(ink)
+            minimumHeight = dp(42); setPadding(dp(12), dp(4), dp(12), dp(4))
+            thumbTintList = ColorStateList.valueOf(Color.rgb(175, 198, 181))
+            isChecked = store.completedTasksLast
+            setOnCheckedChangeListener { _, checked -> store.completedTasksLast = checked }
+        }, LinearLayout.LayoutParams(-1, -2))
+        details.addView(Switch(this).apply {
+            tag = "settings:hide-uncategorized"; text = "캘린더 미분류 탭 숨기기"; textSize = 14f; setTextColor(ink)
+            minimumHeight = dp(42); setPadding(dp(12), dp(4), dp(12), dp(4))
+            thumbTintList = ColorStateList.valueOf(Color.rgb(175, 198, 181))
+            isChecked = store.hideCalendarUncategorized
+            setOnCheckedChangeListener { _, checked -> store.hideCalendarUncategorized = checked }
+        }, LinearLayout.LayoutParams(-1, -2))
+        details.addView(text("미분류 일정은 ‘모두’에서 볼 수 있습니다.", 11f, muted).apply { setPadding(dp(12), 0, dp(12), dp(6)) })
+        row(details).apply {
+            addView(text("알림", 13f, muted).apply { setPadding(dp(12), 0, 0, 0) }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(flat("") { settingsInfo("notifications") }.apply {
+                contentDescription = "알림 안내"
+                val icon = getDrawable(R.drawable.ic_info)!!.mutate().apply { setTint(muted); setBounds(0, 0, dp(18), dp(18)) }
+                setPadding(dp(8), 0, dp(8), 0); setCompoundDrawables(icon, null, null, null)
+            }, LinearLayout.LayoutParams(dp(34), dp(34)))
+        }
+        settingRow(details, "앱 알림", if (TimerEngine.notificationsAllowed(this)) "허용됨" else "차단됨") {
+            openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+        }
+        settingRow(details, "정확한 완료 알람", if (TimerEngine.exactAllowed(this)) "허용됨" else "허용 필요") {
+            if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+        }
+        updateExpanded()
     }
     private fun categoryOrderControls(parent: LinearLayout, categoryId: String) {
         parent.addView(CategoryOrderControls(this, categoryId, "목록", { store.categories().map { it.id to it.name } }) { direction ->
@@ -745,6 +788,7 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) { outState.putString("screen", screen)
         outState.putString("calendarMonth", calendarUi.month.toString()); outState.putString("calendarDate", calendarUi.selectedDate.toString())
         outState.putString("calendarFilter", calendarUi.filter); outState.putString("trashKind", trashKind)
+        outState.putBoolean("otherSettingsExpanded", otherSettingsExpanded)
         super.onSaveInstanceState(outState) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults); TimerEngine.sync(this)

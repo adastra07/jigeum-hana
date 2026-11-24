@@ -17,7 +17,8 @@ CREATE TABLE tasks (
  focus_mode TEXT NOT NULL CHECK(focus_mode IN ('unassigned','timer','stopwatch')),
  focus_minutes INTEGER NOT NULL CHECK(focus_minutes BETWEEN 0 AND 180),
  stopwatch_elapsed_ms INTEGER NOT NULL CHECK(stopwatch_elapsed_ms>=0),
- deleted_at_epoch_ms INTEGER NOT NULL CHECK(deleted_at_epoch_ms>=0)
+ deleted_at_epoch_ms INTEGER NOT NULL CHECK(deleted_at_epoch_ms>=0),
+ completed_at_epoch_ms INTEGER NOT NULL DEFAULT 0 CHECK(completed_at_epoch_ms>=0)
 );
 CREATE TABLE calendar_categories (
  id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
@@ -43,7 +44,9 @@ CREATE TABLE app_settings (
  last_minutes INTEGER NOT NULL CHECK(last_minutes BETWEEN 0 AND 180),
  last_stopwatch INTEGER NOT NULL CHECK(last_stopwatch IN (0,1)),
  wallpaper_enabled INTEGER NOT NULL CHECK(wallpaper_enabled IN (0,1)),
- wallpaper_color_argb INTEGER NOT NULL
+ wallpaper_color_argb INTEGER NOT NULL,
+ calendar_hide_uncategorized INTEGER NOT NULL DEFAULT 0 CHECK(calendar_hide_uncategorized IN (0,1)),
+ completed_tasks_last INTEGER NOT NULL DEFAULT 1 CHECK(completed_tasks_last IN (0,1))
 );
 CREATE TABLE focus_presets (
  position INTEGER PRIMARY KEY CHECK(position BETWEEN 0 AND 2),

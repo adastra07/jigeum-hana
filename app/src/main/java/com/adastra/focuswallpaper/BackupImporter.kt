@@ -96,7 +96,8 @@ object BackupImporter {
                 val mode = c.text("focus_mode"); val minutes = c.int("focus_minutes")
                 require(mode in listOf("timer", "stopwatch", "unassigned"))
                 require(mode == "stopwatch" || (mode == "unassigned") == (minutes == 0))
-                Task(c.text("id"), c.text("title"), c.bool("completed"), minutes, c.text("category_id"), c.long("deleted_at_epoch_ms"), mode == "stopwatch", c.long("stopwatch_elapsed_ms"))
+                Task(c.text("id"), c.text("title"), c.bool("completed"), minutes, c.text("category_id"), c.long("deleted_at_epoch_ms"), mode == "stopwatch", c.long("stopwatch_elapsed_ms"),
+                    if (c.getColumnIndex("completed_at_epoch_ms") >= 0) c.long("completed_at_epoch_ms") else 0)
             }
             val noteCategories = rows("calendar_categories", "position") { c -> NoteCategory(c.text("id"), c.text("name"), c.int("color_argb")) }
             val notes = rows("calendar_entries") { c ->
@@ -107,7 +108,9 @@ object BackupImporter {
             val settings = rows("app_settings") { c ->
                 require(c.int("id") == 1)
                 mapOf<String, Any>("default_focus_mode" to c.text("default_focus_mode"), "font_step" to c.int("font_step"), "last_minutes" to c.int("last_minutes"),
-                    "last_stopwatch" to c.bool("last_stopwatch"), "wallpaper_enabled" to c.bool("wallpaper_enabled"), "wallpaper_color_argb" to c.int("wallpaper_color_argb"))
+                    "last_stopwatch" to c.bool("last_stopwatch"), "wallpaper_enabled" to c.bool("wallpaper_enabled"), "wallpaper_color_argb" to c.int("wallpaper_color_argb"),
+                    "calendar_hide_uncategorized" to if (c.getColumnIndex("calendar_hide_uncategorized") >= 0) c.bool("calendar_hide_uncategorized") else false,
+                    "completed_tasks_last" to if (c.getColumnIndex("completed_tasks_last") >= 0) c.bool("completed_tasks_last") else true)
             }.single()
             val presets = rows("focus_presets", "position") { c -> c.int("position") to c.int("minutes") }
             require(presets.map { it.first } == listOf(0, 1, 2))
@@ -169,6 +172,8 @@ object BackupImporter {
                     .putString("defaultFocusMode", s["default_focus_mode"] as String).putInt("fontStep", s["font_step"] as Int)
                     .putInt("lastMinutes", s["last_minutes"] as Int).putBoolean("lastStopwatch", s["last_stopwatch"] as Boolean)
                     .putBoolean("wallpaperEnabled", s["wallpaper_enabled"] as Boolean).putInt("wallpaperColor", s["wallpaper_color_argb"] as Int)
+                    .putBoolean("hideCalendarUncategorized", s["calendar_hide_uncategorized"] as? Boolean ?: false)
+                    .putBoolean("completedTasksLast", s["completed_tasks_last"] as? Boolean ?: true)
                 // A durable undo record covers process death between the two storage commits.
                 writeUndo(context, previous)
                 preferencesWritten = true

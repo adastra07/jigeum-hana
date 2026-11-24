@@ -17,6 +17,7 @@ import android.widget.ScrollView
 class TaskDragReorder(
     private val card: LinearLayout,
     private val scroll: ScrollView,
+    private val settled: () -> Unit = {},
     private val save: (List<String>) -> Unit
 ) {
     private val overlayHost = scroll.parent as ViewGroup
@@ -77,6 +78,7 @@ class TaskDragReorder(
                         dragged?.isPressed = false
                         dragged = null
                         scroll.requestDisallowInterceptTouchEvent(false)
+                        if (event.result) settled()
                         true
                     }
                     else -> true
