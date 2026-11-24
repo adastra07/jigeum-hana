@@ -542,6 +542,17 @@ class MainActivity : Activity() {
                 if (Build.VERSION.SDK_INT >= 31) openSettings(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
             }
         }
+        section("백업", {
+            AlertDialog.Builder(this).setTitle("백업")
+                .setMessage("할 일·목록·캘린더·분류·휴지통·설정과 스탑워치 기록을 DB 파일로 저장합니다. 저장 위치를 선택할 수 있습니다.")
+                .setPositiveButton("닫기", null).show()
+        }) { card ->
+            card.addView(flat("파일로 내보내기", soft, accent) {
+                if (BackupExporter.isBusy()) toast("백업 중입니다")
+                else try { startActivityForResult(BackupExporter.createDocumentIntent(), BackupExporter.REQUEST_CODE) }
+                catch (_: ActivityNotFoundException) { toast("파일 저장 화면을 열지 못했습니다") }
+            }.apply { contentDescription = "백업 파일로 내보내기" }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
         page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun categoryOrderControls(parent: LinearLayout, categoryId: String) {
@@ -790,6 +801,12 @@ class MainActivity : Activity() {
             }
         }
         return hasText
+    }
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == BackupExporter.REQUEST_CODE && resultCode == RESULT_OK) {
+            data?.data?.let { BackupExporter.export(this, it) } ?: toast("파일 저장 위치를 확인하지 못했습니다")
+        }
     }
     override fun onDestroy() { if (::calendarUi.isInitialized) calendarUi.dispose(); if (::noteRepository.isInitialized) noteRepository.close(); super.onDestroy() }
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
