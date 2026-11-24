@@ -154,16 +154,35 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
             { ui.editCategory(repo, null) { changed() } }))
     }
     private fun categoryMenu(category: NoteCategory, changed: () -> Unit) {
-        val choices = mutableListOf("이름·색상 변경", "왼쪽으로", "오른쪽으로")
-        if (category.id != NOTE_UNCATEGORIZED) choices.add("분류 삭제")
-        AlertDialog.Builder(activity).setTitle(category.name).setItems(choices.toTypedArray()) { _, i ->
-            when (i) {
-                0 -> ui.editCategory(repo, category) { changed() }
-                1, 2 -> { repo.moveCategory(category.id, if (i == 1) -1 else 1); changed() }
-                else -> AlertDialog.Builder(activity).setTitle("분류를 삭제할까요?").setMessage("이 분류의 메모와 휴지통 메모는 미분류로 이동합니다.")
-                    .setNegativeButton("취소", null).setPositiveButton("삭제") { _, _ -> repo.removeCategory(category.id); if (filter == category.id) filter = ""; changed() }.show()
-            }
-        }.show()
+        val body = ui.column().apply { setPadding(ui.dp(16), ui.dp(4), ui.dp(16), ui.dp(4)) }
+        body.addView(ui.text("분류 순서", 13f, ui.muted).apply { setPadding(0, 0, 0, 0) })
+        body.addView(CategoryOrderControls(activity, category.id, "분류", { repo.categories().map { it.id to it.name } }) { direction ->
+            repo.moveCategory(category.id, direction); changed()
+        })
+        body.addView(Space(activity), LinearLayout.LayoutParams(1, ui.dp(8)))
+        val rename = ui.button("이름·색상 변경") {}.apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL; minimumHeight = ui.dp(38)
+            setPadding(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(4)); setTextColor(ui.ink)
+        }
+        body.addView(rename, LinearLayout.LayoutParams(-1, -2))
+        val delete = if (category.id != NOTE_UNCATEGORIZED) ui.button("분류 삭제") {}.apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL; minimumHeight = ui.dp(38)
+            setPadding(ui.dp(12), ui.dp(4), ui.dp(12), ui.dp(4)); setTextColor(ui.muted)
+            body.addView(this, LinearLayout.LayoutParams(-1, -2))
+        } else null
+        val dialog = AlertDialog.Builder(activity).setTitle(category.name).setView(body).setNegativeButton("닫기", null).create()
+        rename.setOnClickListener {
+            dialog.dismiss()
+            repo.categories().firstOrNull { it.id == category.id }?.let { current -> ui.editCategory(repo, current) { changed() } }
+        }
+        delete?.setOnClickListener {
+            dialog.dismiss()
+            AlertDialog.Builder(activity).setTitle("분류를 삭제할까요?").setMessage("이 분류의 메모와 휴지통 메모는 미분류로 이동합니다.")
+                .setNegativeButton("취소", null).setPositiveButton("삭제") { _, _ ->
+                    repo.removeCategory(category.id); if (filter == category.id) filter = ""; changed()
+                }.show()
+        }
+        dialog.show()
     }
     fun showDay(date: LocalDate) {
         dayDialog?.dismiss()

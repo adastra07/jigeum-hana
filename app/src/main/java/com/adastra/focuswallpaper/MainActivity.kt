@@ -564,49 +564,11 @@ class MainActivity : Activity() {
         page.addView(text("지금 하나 ${packageManager.getPackageInfo(packageName, 0).versionName}", 11f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(8), 0, 0) })
     }
     private fun categoryOrderControls(parent: LinearLayout, categoryId: String) {
-        val strip = row(parent)
-        val leftArrow = flat("‹", color = muted) {}.apply { textSize = 23f; setPadding(0, 0, 0, 0) }
-        val leftName = text("", 12f, muted)
-        val currentName = text("", 13f, accent).apply { setTypeface(null, Typeface.BOLD); background = shape(soft) }
-        val rightName = text("", 12f, muted)
-        val rightArrow = flat("›", color = muted) {}.apply { textSize = 23f; setPadding(0, 0, 0, 0) }
-        listOf(leftName, currentName, rightName).forEach {
-            it.gravity = Gravity.CENTER; it.maxLines = 2; it.ellipsize = TextUtils.TruncateAt.END
-            it.setPadding(dp(4), dp(3), dp(4), dp(3)); it.minimumHeight = dp(36)
-        }
-        strip.addView(leftArrow, LinearLayout.LayoutParams(dp(36), dp(36)))
-        strip.addView(leftName, LinearLayout.LayoutParams(0, -2, 1f))
-        strip.addView(currentName, LinearLayout.LayoutParams(0, -2, 1.2f))
-        strip.addView(rightName, LinearLayout.LayoutParams(0, -2, 1f))
-        strip.addView(rightArrow, LinearLayout.LayoutParams(dp(36), dp(36)))
-        fun refresh() {
-            val categories = store.categories()
-            val index = categories.indexOfFirst { it.id == categoryId }
-            if (index < 0) { strip.visibility = View.GONE; return }
-            val left = categories.getOrNull(index - 1)
-            val right = categories.getOrNull(index + 1)
-            currentName.text = categories[index].name
-            currentName.contentDescription = "순서를 바꿀 목록, ${categories[index].name}"
-            leftName.text = left?.name.orEmpty(); rightName.text = right?.name.orEmpty()
-            leftArrow.visibility = if (left == null) View.INVISIBLE else View.VISIBLE
-            leftName.visibility = leftArrow.visibility
-            rightArrow.visibility = if (right == null) View.INVISIBLE else View.VISIBLE
-            rightName.visibility = rightArrow.visibility
-            leftArrow.contentDescription = "${categories[index].name} 목록을 한 칸 왼쪽으로 이동"
-            rightArrow.contentDescription = "${categories[index].name} 목록을 한 칸 오른쪽으로 이동"
-        }
-        fun move(direction: Int) {
+        parent.addView(CategoryOrderControls(this, categoryId, "목록", { store.categories().map { it.id to it.name } }) { direction ->
             val categories = store.categories()
             val updated = CategoryOrder.move(categories, categoryId, direction)
-            if (updated != categories) {
-                store.saveCategories(updated)
-                renderPage()
-            }
-            refresh()
-        }
-        leftArrow.setOnClickListener { move(-1) }
-        rightArrow.setOnClickListener { move(1) }
-        refresh()
+            if (updated != categories) { store.saveCategories(updated); renderPage() }
+        })
     }
     private fun defaultFocusSettings() {
         section("기본 집중 시간", { settingsInfo("defaultFocus") }) { card ->
