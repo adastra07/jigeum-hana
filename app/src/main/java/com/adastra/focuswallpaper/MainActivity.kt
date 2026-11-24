@@ -275,36 +275,22 @@ class MainActivity : Activity() {
             listOf("tasks" to "할 일", "calendar" to "캘린더").forEach { (kind, label) ->
                 addView(flat(label, if (kind == trashKind) soft else Color.TRANSPARENT, if (kind == trashKind) ink else muted) {
                     trashKind = kind; renderPage()
-                }.apply { isSelected = kind == trashKind }, LinearLayout.LayoutParams(0, -2, 1f))
+                }.apply { tag = "trash:filter:$kind"; isSelected = kind == trashKind }, LinearLayout.LayoutParams(0, -2, 1f))
             }
         }
         gap(page, 8)
         if (trashKind == "calendar") { calendarUi.renderTrash(page); return }
 
         val tasks = store.tasks().filter { it.deletedAt > 0 }.sortedByDescending { it.deletedAt }
-        if (tasks.isEmpty()) { page.addView(text("휴지통이 비어 있습니다", 15f, muted).apply { setPadding(dp(8), dp(24), dp(8), 0) }); return }
-        row(page).apply {
-            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
-            addView(flat("휴지통 비우기", color = muted) { emptyTrash() }, LinearLayout.LayoutParams(-2, dp(44)))
-        }
-        val card = card(page)
-        tasks.forEach { task ->
-            val line = row(card).apply { setPadding(dp(8), dp(4), 0, dp(4)) }
-            val body = column()
-            body.addView(text(task.text, 16f))
-            body.addView(text(store.categories().firstOrNull { it.id == task.categoryId }?.name ?: "할 일", 12f, muted))
-            line.addView(body, LinearLayout.LayoutParams(0, -2, 1f))
-            line.addView(flat("", color = muted) {
-                val tasksNow = store.tasks().map { if (it.id == task.id) it.restore() else it }
-                store.saveTasks(tasksNow); renderPage()
-            }.apply {
-                contentDescription = "${task.text} 복원"
-                val icon = getDrawable(R.drawable.ic_restore)!!.mutate().apply { setTint(muted); setBounds(0, 0, dp(22), dp(22)) }
-                setCompoundDrawables(icon, null, null, null); setPadding(dp(13), 0, dp(13), 0)
-            }, LinearLayout.LayoutParams(dp(48), dp(48)))
-            line.addView(flat("×", color = muted) { permanentlyDelete(task) }.apply { textSize = 23f; contentDescription = "${task.text} 영구 삭제" }, LinearLayout.LayoutParams(dp(40), dp(48)))
-        }
+        TrashUi(this).render(page, tasks.map { task ->
+            TrashEntry(task.text, store.categories().firstOrNull { it.id == task.categoryId }?.name ?: "할 일",
+                restore = {
+                    val tasksNow = store.tasks().map { if (it.id == task.id) it.restore() else it }
+                    store.saveTasks(tasksNow); renderPage()
+                }, delete = { permanentlyDelete(task) })
+        }, ::emptyTrash)
     }
+
     private fun trashTask(task: Task, onMoved: () -> Unit = {}) {
         store.saveTasks(store.tasks().map { if (it.id == task.id) it.trash(System.currentTimeMillis()) else it })
         if (store.timer.taskId == task.id || store.selected == task.id) clearFocus()

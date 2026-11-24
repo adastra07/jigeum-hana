@@ -207,22 +207,19 @@ class CalendarUi(private val activity: Activity, private val repo: NoteRepositor
     }
     fun renderTrash(parent: LinearLayout) {
         val notes = repo.notes(includeTrash = true).filter { it.deletedAt > 0 }.sortedByDescending { it.deletedAt }
-        if (notes.isEmpty()) { parent.addView(ui.text("캘린더 휴지통이 비어 있습니다", 14f, ui.muted)); return }
-        parent.addView(ui.button("캘린더 휴지통 비우기") {
-            AlertDialog.Builder(activity).setTitle("캘린더 휴지통을 비울까요?").setMessage("${notes.size}개 메모를 영구 삭제합니다. 할 일 휴지통은 유지합니다.")
-                .setNegativeButton("취소", null).setPositiveButton("비우기") { _, _ -> repo.emptyCalendarTrash(); redraw() }.show()
-        })
-        notes.forEach { note ->
-            ui.row(parent).apply {
-                addView(ui.column().apply {
-                    addView(ui.text(note.displayTitle, 16f)); addView(ui.text(ui.scheduleLabel(note.schedule!!), 11f, ui.muted))
-                }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(ui.icon(R.drawable.ic_restore, "${note.displayTitle} 복원") { repo.get(note.id)?.let { repo.save(it.restore()) }; redraw() }, LinearLayout.LayoutParams(ui.dp(44), ui.dp(44)))
-                addView(ui.button("×") {
+        TrashUi(activity).render(parent, notes.map { note ->
+            TrashEntry(note.displayTitle, ui.scheduleLabel(note.schedule!!),
+                restore = { repo.get(note.id)?.let { repo.save(it.restore()) }; redraw() },
+                delete = {
                     AlertDialog.Builder(activity).setTitle("영구 삭제할까요?").setMessage(note.displayTitle)
                         .setNegativeButton("취소", null).setPositiveButton("삭제") { _, _ -> repo.permanentlyDelete(note.id); redraw() }.show()
-                }.apply { contentDescription = "${note.displayTitle} 영구 삭제" }, LinearLayout.LayoutParams(ui.dp(40), ui.dp(44)))
-            }
+                })
+        }) {
+            AlertDialog.Builder(activity).setTitle("휴지통을 비울까요?")
+                .setMessage("캘린더 휴지통의 ${notes.size}개 항목이 영구 삭제됩니다. 할 일 휴지통은 유지합니다. 삭제한 항목은 복원할 수 없습니다.")
+                .setNegativeButton("취소", null).setPositiveButton("비우기") { _, _ ->
+                    repo.emptyCalendarTrash(); redraw(); Toast.makeText(activity, "휴지통을 비웠습니다", Toast.LENGTH_SHORT).show()
+                }.show().apply { getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(ui.muted) }
         }
     }
 }
