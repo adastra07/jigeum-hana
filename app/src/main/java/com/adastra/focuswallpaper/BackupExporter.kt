@@ -27,6 +27,7 @@ object BackupExporter {
     fun export(context: Context, destination: Uri) {
         val app = context.applicationContext
         fun message(text: String) { Toast.makeText(app, text, Toast.LENGTH_SHORT).show() }
+        if (BackupImporter.isBusy()) { message("가져오기 중입니다"); return }
         if (!busy.compareAndSet(false, true)) { message("백업 중입니다"); return }
         val snapshot = try { BackupSnapshot.capture(app) } catch (_: Exception) {
             busy.set(false); message("백업할 데이터를 읽지 못했습니다"); return
